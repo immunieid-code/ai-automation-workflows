@@ -2,6 +2,8 @@
 
 Three n8n workflow exports from Nur Rahman Shalahudin's [AI automation portfolio](https://nrshalahudin-ai.vercel.app/). Each export is a **workflow design**, with its node and connection graph intact. The source files have `active: false`; they do not establish production usage, client deployment, or measured time savings. [Sleyd AI](https://sleyd.com/) is a separate live product described on the portfolio site.
 
+The deployed portfolio page and its referenced public assets are also versioned in [`portfolio/`](portfolio/). This is the static website source used for the Vercel deployment; the private Vercel project link and environment file are excluded.
+
 | Workflow | Problem | Designed path | Source |
 | --- | --- | --- | --- |
 | Sleyd Presentation · form pipeline | Uploaded documents and revisions need a coherent slide plan before rendering. | PDF/DOCX/PPTX extraction, validation, content classification, slide outline review and edits, image retrieval, HTML sanitation, Vercel deployment and aliasing. 35 nodes. | [`sleyd-presentation-form.json`](workflows/sleyd-presentation-form.json) |

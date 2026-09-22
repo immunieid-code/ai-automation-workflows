@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nur Rahman Shalahudin — AI Workflow Automation</title>
+<meta name="description" content="Nur Rahman Shalahudin builds AI and n8n workflows. Explore Sleyd AI, form-based presentation and scrollytelling pipelines, and an AutoData Analyst workflow." />
+<meta name="color-scheme" content="dark" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..100,400..800&family=Chivo+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  /* Cutting bench — the world holds one ink on true black. */
+  --ink:#0A0A0A;
+  --charred:#141312;
+  --spool:#2A2724;
+  --spool-lit:#4E463D;
+  --leader:#332E28;         /* film leader — light enough that punched holes read */
+  --orange:#FF5A1F;
+  --orange-deep:#C43D0E;
+  --orange-ghost:rgba(255,90,31,.13);
+  --punched:#FFFFFF;
+  --edge:#F2F0ED;
+  --prose:#B8B2AA;
+  --on-orange:#0A0A0A;
+  --on-orange-soft:#4A1806;   /* 4.7:1 on grain orange */
+
+  --cond:"Archivo",system-ui,sans-serif;
+  --mono:"Chivo Mono",ui-monospace,monospace;
+
+  --rail-h:52px;
+  --mast-h:60px;
+  --pitch:22px;              /* perforation pitch — one unit of the whole page */
+  --gut:clamp(20px,4vw,52px);
+  --maxw:1280px;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+/* ============ FILM LEADER — the load hook ============
+   A ~1.6s SMPTE-style academy leader that overlays the page on first visit,
+   then falls away. Uses the site's own condensed grotesk + grain orange
+   so it lands as an extension of the world, not a preloader accessory.
+   Skipped when prefers-reduced-motion is set, and after sessionStorage
+   marks it seen. */
+#leader{
+  position:fixed; inset:0; z-index:9999; background:var(--ink);
+  display:grid; place-items:center;
+  pointer-events:none;
+  overflow:hidden;
+}
+/* the grain moves onto the leader too — same texture, same layer weight */
+#leader::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity:.32; mix-blend-mode:overlay;
+}
+/* the classic leader clock: two concentric hairlines and a sweeping arm */
+.leader-face{
+  position:relative;
+  width:min(72vmin, 720px); aspect-ratio:1/1;
+  display:grid; place-items:center;
+}
+.leader-face::before, .leader-face::after{
+  content:""; position:absolute; inset:0;
+  border:1px solid var(--spool-lit); border-radius:50%;
+  animation:leaderRingIn .35s .05s cubic-bezier(.16,1,.3,1) both;
+}
+.leader-face::after{inset:8%; border-color:var(--orange-deep); opacity:.55}
+/* the sweeping arm rotates a full turn per second beat, the classic 24fps read */
+.leader-arm{
+  position:absolute; inset:0; display:grid; place-items:center;
+  animation:leaderSweep 1.35s linear both;
+  transform-origin:50% 50%;
+}
+.leader-arm::before{
+  content:""; width:2px; height:52%; background:var(--orange); position:absolute;
+  top:0; left:calc(50% - 1px); transform-origin:50% 100%;
+  box-shadow:0 0 0 1px rgba(255,90,31,.25);
+}
+@keyframes leaderSweep{
+  from{transform:rotate(-90deg)} to{transform:rotate(990deg)}
+}
+@keyframes leaderRingIn{
+  from{transform:scale(.6); opacity:0} to{transform:scale(1); opacity:1}
+}
+/* the numeral cascade — 03, 02, 01, each fading in and blinking out as the arm passes */
+.leader-num{position:absolute; inset:0; display:grid; place-items:center}
+.leader-num .n{
+  grid-area:1/1;
+  font-family:var(--cond); font-variation-settings:"wdth" 62,"wght" 800;
+  font-size:clamp(180px, 34vmin, 380px); line-height:1;
+  color:var(--orange); letter-spacing:-.04em;
+  opacity:0; will-change:opacity, transform;
+  animation:leaderStep 1.35s var(--d,0s) both;
+}
+.leader-num .n:nth-child(1){--d:0s}
+.leader-num .n:nth-child(2){--d:.45s}
+.leader-num .n:nth-child(3){--d:.9s}
+@keyframes leaderStep{
+  0%{opacity:0; transform:scale(1.15)}
+  9%{opacity:1; transform:scale(1)}
+  28%{opacity:1; transform:scale(1)}
+  33%{opacity:0; transform:scale(.94)}
+  100%{opacity:0}
+}
+/* the caption band on the leader — always says the same thing a real leader says */
+.leader-cap{
+  position:absolute; bottom:clamp(28px, 6vh, 60px); left:0; right:0;
+  text-align:center; color:var(--prose); opacity:.55;
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.42em;
+  animation:leaderCap .4s .1s both;
+}
+@keyframes leaderCap{from{opacity:0; letter-spacing:.7em} to{opacity:.55; letter-spacing:.42em}}
+/* the leader itself: drops away as the arm passes 01 */
+#leader{animation:leaderOut .45s 1.55s cubic-bezier(.5,0,.75,0) forwards}
+@keyframes leaderOut{to{opacity:0; visibility:hidden; transform:translateY(-8px)}}
+/* once flagged done, JS pulls the node from layout — belt and braces */
+body.leader-off #leader{display:none}
+@media (prefers-reduced-motion:reduce){
+  #leader{display:none}
+}
+
+body{
+  margin:0;
+  background:var(--ink);
+  color:var(--prose);
+  font-family:var(--cond);
+  font-variation-settings:"wdth" 100,"wght" 400;
+  font-size:16.5px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+
+/* ---- coarse film grain over the whole bench ---- */
+.grain{
+  position:fixed; inset:0;
+  pointer-events:none; z-index:900;
+  opacity:.34; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---- shared type registers ---- */
+.lbl{
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.13em;
+  font-size:.72rem; line-height:1.3;
+}
+.num{font-family:var(--mono); font-size:.7rem; letter-spacing:.06em; font-variant-numeric:tabular-nums}
+.disp{
+  font-variation-settings:"wdth" 62,"wght" 800;
+  text-transform:uppercase;
+  letter-spacing:-.022em; line-height:.88;
+  color:var(--edge); margin:0;
+  font-size:clamp(2.6rem,7.4vw,5.6rem);
+}
+.disp .hot{color:var(--orange)}
+h2.disp{font-size:clamp(2rem,5vw,3.6rem)}
+h3{
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.02em;
+  font-size:1.02rem; line-height:1.2; color:var(--edge); margin:0;
+}
+p{margin:0 0 .85em; max-width:68ch}
+p:last-child{margin-bottom:0}
+a{color:var(--orange); text-decoration:none}
+a:hover{text-decoration:underline; text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--orange); outline-offset:3px}
+/* on orange grounds the orange ring is invisible — switch it to ink */
+.rail :focus-visible,.close :focus-visible,.btn.solid:focus-visible,.caps :focus-visible{
+  outline-color:var(--ink); outline-offset:2px;
+}
+svg{flex:0 0 auto}
+a svg,button svg{width:14px; height:14px}
+
+.wrap{max-width:var(--maxw); margin:0 auto; padding-inline:var(--gut)}
+
+/* ---- sprocket edge: the world's one repeated device ---- */
+.sprock{position:relative}
+.sprock::before,.sprock::after{
+  content:""; position:absolute; top:7px; bottom:7px; width:5px;
+  background-image:radial-gradient(circle at 50% 50%, currentColor 0 1.6px, transparent 1.9px);
+  background-size:5px var(--pitch); background-repeat:repeat-y;
+  opacity:.85; pointer-events:none;
+}
+.sprock::before{left:7px}
+.sprock::after{right:7px}
+
+/* ============ MASTHEAD ============ */
+.mast{
+  position:sticky; top:0; z-index:80;
+  height:var(--mast-h);
+  background:var(--ink);
+  border-bottom:1px solid var(--spool);
+}
+.mast .wrap{height:100%; display:flex; align-items:center; gap:22px}
+.mark{display:flex; align-items:center; gap:10px; flex:0 0 auto}
+.mark svg{width:26px; height:26px; color:var(--orange); flex:0 0 auto}
+.mark b{
+  font-variation-settings:"wdth" 68,"wght" 800;
+  text-transform:uppercase; letter-spacing:.02em;
+  font-size:1.16rem; color:var(--edge);
+}
+.mark span{
+  color:var(--prose); padding-left:12px; margin-left:2px;
+  border-left:1px solid var(--spool);
+}
+.mnav{margin-left:auto; display:flex; align-items:center; gap:clamp(14px,2vw,28px)}
+.mnav a{color:var(--prose); position:relative; padding:4px 0}
+.mnav a:hover{color:var(--edge); text-decoration:none}
+.mnav a[aria-current]{color:var(--orange)}
+.mnav a[aria-current]::after{
+  content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--orange);
+}
+@media (max-width:900px){.mark span,.mnav a:not(.btn){display:none}}
+
+/* ---- buttons: sprocketed film leader ---- */
+.btn{
+  display:inline-flex; align-items:center; gap:9px;
+  padding:11px 26px; border:1.5px solid var(--orange);
+  color:var(--orange); background:transparent;
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.11em; font-size:.75rem;
+  cursor:pointer; transition:background .18s cubic-bezier(.2,.7,.3,1), color .18s;
+}
+.btn:hover{background:var(--orange); color:var(--on-orange); text-decoration:none}
+.btn:hover::before,.btn:hover::after{opacity:.5}
+.btn.solid{background:var(--orange); color:var(--on-orange)}
+.btn.solid:hover{background:var(--orange-deep); border-color:var(--orange-deep); color:var(--edge)}
+.btn.onhot{border-color:var(--on-orange); color:var(--on-orange)}
+.btn.onhot:hover{background:var(--on-orange); color:var(--orange)}
+.btn svg{width:13px; height:13px}
+
+/* ============ THE RAIL ============ */
+.rail{
+  position:sticky; top:var(--mast-h); z-index:70;
+  background:var(--orange);
+  border-bottom:1px solid var(--orange-deep);
+}
+.rail::before,.rail::after{
+  content:""; position:absolute; left:0; right:0; height:9px;
+  background-image:linear-gradient(90deg, var(--ink) 0 10px, transparent 10px);
+  background-size:var(--pitch) 6px; background-repeat:repeat-x; background-position:center;
+}
+.rail::before{top:0}
+.rail::after{bottom:0}
+.rail .wrap{position:relative; display:flex; align-items:center; padding-block:5px}
+.ticks{
+  position:relative; width:100%;
+  display:flex; justify-content:space-between; align-items:flex-end;
+}
+.tick{
+  position:relative; background:none; border:0;
+  min-width:44px; min-height:44px; padding:14px 6px 6px;
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+  color:var(--on-orange); cursor:pointer;
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.04em;
+  opacity:.75; transition:opacity .18s;
+}
+.tick::after{content:""; display:block; height:6px; width:1px; background:var(--on-orange); margin:3px auto 0}
+.tick:hover{opacity:1}
+.tick[aria-current]{opacity:1; font-weight:700}
+.tick[aria-current]::after{height:10px; width:2px}
+
+/* the folded tape flag — travels to the frame you are in */
+.flag{
+  position:absolute; top:calc(100% + 5px); width:34px; height:40px;
+  background:var(--orange); border:1px solid var(--orange-deep); border-top:0;
+  clip-path:polygon(0 0,100% 0,100% 100%,50% 74%,0 100%);
+  display:flex; justify-content:center; padding-top:5px;
+  font-family:var(--mono); font-size:.66rem; font-weight:700; color:var(--on-orange);
+  transform:translateX(-50%);
+  transition:left .5s cubic-bezier(.16,1,.3,1);
+  pointer-events:none;
+  box-shadow:0 6px 14px rgba(0,0,0,.55);
+}
+@media (prefers-reduced-motion:reduce){.flag{transition:none}}
+
+/* returning marker */
+.resume{
+  position:fixed; right:var(--gut); bottom:22px; z-index:85;
+  display:none; align-items:center; gap:12px;
+  background:var(--charred); border:1px solid var(--orange);
+  padding:10px 12px 10px 16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.7);
+}
+.resume.on{display:flex}
+.resume span{color:var(--prose)}
+.resume b{color:var(--orange)}
+.resume button{
+  background:none; border:0; cursor:pointer; padding:6px;
+  color:var(--prose); font-family:var(--cond);
+}
+.resume button:hover{color:var(--edge)}
+.resume .go{
+  border:1px solid var(--spool-lit); color:var(--orange);
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.1em; font-size:.68rem; padding:6px 12px;
+}
+.resume .go:hover{border-color:var(--orange)}
+
+/* ============ FRAMES ============ */
+.frame{padding:clamp(54px,6.4vw,88px) 0; border-bottom:1px solid var(--spool); scroll-margin-top:calc(var(--mast-h) + 12px)}
+.frame:last-of-type{border-bottom:0}
+/* heading and its opening prose share one row, so no section opens onto a dead half */
+.fhead{
+  display:grid; grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr);
+  gap:clamp(24px,5vw,64px); align-items:end;
+}
+.fhead>div:last-child{padding-bottom:6px}
+.fhead .lede{margin-top:0}
+@media (max-width:900px){
+  .fhead{grid-template-columns:1fr; align-items:start; gap:24px}
+  .fhead>div:last-child{padding-bottom:0}
+}
+
+/* ---- 01 hero ---- */
+.lede{margin:22px 0 0; color:var(--prose); font-size:1.06rem; max-width:56ch}
+.acts{display:flex; flex-wrap:wrap; gap:12px; margin-top:30px}
+/* the availability status rides in the masthead now, so no kicker sits above the H1 */
+.standing{
+  display:inline-flex; align-items:center; gap:8px;
+  color:var(--orange); margin-left:auto;
+}
+.standing i{width:7px; height:7px; background:var(--orange); border-radius:50%; flex:0 0 auto}
+@media (max-width:760px){.standing{display:none}}
+
+/* ---- the strip: a work print laid across the full sheet ---- */
+.strip-band{margin-top:clamp(42px,6vw,72px)}
+.strip-rule{display:flex; padding:0 0 7px; border-bottom:1px solid var(--spool)}
+.strip-rule span{
+  flex:1 1 0; padding-left:15px;
+  font-family:var(--mono); font-size:.64rem; color:var(--prose); opacity:.72; letter-spacing:.06em;
+}
+.strip-rule span::after{content:""; display:block; height:5px; width:1px; background:var(--spool-lit); margin:4px 0 -12px}
+
+/* the leader carries the perforations; it must sit outside the scroll
+   container, or overflow-x clips the punched holes away */
+.strip-frame{position:relative; margin-top:19px; padding-block:15px; background:var(--leader)}
+.strip-frame::before,.strip-frame::after{
+  content:""; position:absolute; left:0; right:0; height:15px; z-index:2;
+  background-image:linear-gradient(90deg, var(--ink) 0 10px, transparent 10px);
+  background-size:var(--pitch) 8px; background-repeat:repeat-x; background-position:center;
+  pointer-events:none;
+}
+.strip-frame::before{top:0}
+.strip-frame::after{bottom:0}
+.strip{
+  display:flex; background:var(--ink);
+  overflow-x:auto; scroll-snap-type:x mandatory;
+  scrollbar-width:thin; scrollbar-color:var(--spool) transparent;
+}
+
+.cell{
+  flex:1 1 0; min-width:0; scroll-snap-align:start;
+  position:relative; border-right:1px solid var(--spool); background:var(--ink);
+  padding:18px 15px 16px; min-height:122px;
+  display:flex; flex-direction:column; gap:12px;
+}
+.cell:last-child{border-right:0}
+.cell .num{color:var(--prose); opacity:.72}
+.cell b{
+  display:block; margin-top:auto;
+  font-variation-settings:"wdth" 70,"wght" 700;
+  text-transform:uppercase; letter-spacing:.05em;
+  font-size:.92rem; color:var(--edge); line-height:1.1;
+}
+.cell i{display:block; font-style:normal; font-size:.72rem; color:var(--prose); opacity:.74; margin-top:5px; line-height:1.32}
+.cell.flagged{outline:2px solid var(--orange); outline-offset:-2px}
+.cell.flagged b{color:var(--orange)}
+.cell.flagged::before{ /* the folded flag lands on the frame it marks */
+  content:""; position:absolute; top:-15px; left:50%; transform:translateX(-50%);
+  width:26px; height:21px; background:var(--orange); z-index:3;
+  clip-path:polygon(0 0,100% 0,100% 100%,50% 66%,0 100%);
+}
+/* narrow screens drop frame count, never frame size */
+@media (max-width:900px){ .cell{flex:0 0 152px} }
+.strip-cap{margin-top:18px; color:var(--prose); opacity:.75}
+
+/* ---- 02 the capability sheet, drenched ---- */
+.field{background:var(--orange); color:var(--on-orange); position:relative; border-bottom:0}
+.field::before{
+  content:""; position:absolute; top:0; left:0; right:0; height:9px;
+  background-image:linear-gradient(90deg, var(--ink) 0 10px, transparent 10px);
+  background-size:var(--pitch) 6px; background-repeat:repeat-x; background-position:center;
+}
+.field .disp{color:var(--on-orange)}
+.field p{color:var(--on-orange-soft)}
+.caps{margin-top:clamp(30px,4vw,46px); border-top:1.5px solid var(--on-orange-soft)}
+.caprow{
+  display:grid; grid-template-columns:minmax(0,.3fr) minmax(0,.7fr);
+  gap:clamp(14px,3vw,40px); padding:17px 0;
+  border-bottom:1px solid rgba(74,24,6,.34);
+}
+.caprow h3{color:var(--on-orange); font-size:.9rem; letter-spacing:.1em}
+.caprow p{font-size:1rem; max-width:66ch; margin:0}
+@media (max-width:720px){.caprow{grid-template-columns:1fr; gap:6px}}
+
+/* ---- 03 the cut ---- */
+.cut-head{display:flex; align-items:baseline; flex-wrap:wrap; gap:14px 18px; margin-bottom:8px}
+.band{
+  background:var(--orange); color:var(--on-orange); padding:5px 13px;
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.13em; font-size:.68rem;
+}
+.cut-grid{display:grid; grid-template-columns:1.18fr 1fr; gap:clamp(24px,3.5vw,44px); margin-top:34px; align-items:start}
+@media (max-width:960px){.cut-grid{grid-template-columns:1fr}}
+
+/* punched white windows — the only place foreign images and long prose sit */
+.window{background:var(--punched); padding:10px 10px 0; box-shadow:0 18px 44px rgba(0,0,0,.6)}
+.window img{display:block; width:100%; height:auto}
+.window figcaption{
+  display:flex; justify-content:space-between; gap:14px;
+  padding:9px 3px 10px; color:#4A4642;
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.1em; font-size:.63rem;
+}
+.window figcaption em{font-style:normal; font-family:var(--mono); color:#7A736C; letter-spacing:.04em}
+.shots{display:flex; flex-direction:column; gap:22px}
+
+/* spec rows */
+.spec{border:1px solid var(--spool); color:var(--spool-lit); padding:12px 20px}
+.spec dl{margin:0; display:grid; grid-template-columns:auto 1fr; gap:0}
+.spec dt,.spec dd{
+  padding:9px 0; margin:0;
+  border-bottom:1px dashed var(--spool);
+}
+.spec dt{
+  color:var(--prose); opacity:.82; padding-right:20px; white-space:nowrap;
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.09em; font-size:.68rem; line-height:1.9;
+}
+.spec dd{color:var(--edge); font-size:.9rem; text-align:right}
+.spec dt:nth-last-of-type(1),.spec dd:nth-last-of-type(1){border-bottom:0}
+.spec dd.void{color:var(--prose); opacity:.78}
+.spec dd .punch{
+  display:inline-block; margin-left:8px; padding:1px 7px;
+  border:1px dashed var(--spool-lit); color:var(--prose);
+  font-family:var(--mono); font-size:.6rem; letter-spacing:.08em; opacity:.95;
+}
+
+/* a taped-on note, not a coloured rule down the side */
+.breaks{
+  position:relative; margin-top:36px;
+  border:1px solid var(--spool); background:var(--charred);
+  padding:28px 22px 22px;
+  box-shadow:0 14px 34px rgba(0,0,0,.55);
+}
+.breaks h3{
+  position:absolute; top:-11px; left:16px;
+  background:var(--orange); color:var(--on-orange);
+  padding:4px 13px; font-size:.68rem; letter-spacing:.13em;
+}
+.breaks p{font-size:.95rem; margin:0}
+
+/* ---- 04 the bin ---- */
+.wire{height:1px; background:var(--spool-lit); margin-top:56px; margin-bottom:22px; position:relative; z-index:1}
+@media (max-width:860px){.wire{display:none}}
+.trims{display:grid; grid-template-columns:repeat(3,1fr); gap:clamp(18px,3vw,34px) clamp(18px,3vw,34px); align-items:start}
+@media (max-width:860px){.trims{row-gap:34px}}
+@media (max-width:860px){.trims{grid-template-columns:1fr}}
+.trim{
+  position:relative; padding:36px 22px 22px 30px; background:var(--charred);
+  border:1px solid var(--spool);
+  display:flex; flex-direction:column;
+  transform-origin:28px -8px; rotate:var(--tilt,0deg);
+}
+.trim:nth-child(1){--tilt:-.55deg}
+.trim:nth-child(2){--tilt:.4deg}
+.trim:nth-child(3){--tilt:-.28deg}
+.trim::before{ /* the pin, on a stem back up to the wire */
+  content:""; position:absolute; top:-28px; left:22px; width:12px; height:12px;
+  border-radius:50%; background:var(--orange);
+  box-shadow:0 3px 7px rgba(0,0,0,.75), -5.5px -22px 0 -5px var(--spool-lit);
+}
+@media (max-width:860px){.trim::before{top:-6px; box-shadow:0 3px 7px rgba(0,0,0,.75)}}
+/* row two and beyond: already off the wire, resting flat in the bin — no pin, no tilt */
+.trim:nth-child(n+4){--tilt:0deg; padding-top:22px}
+.trim:nth-child(n+4)::before{content:none}
+@media (max-width:860px){.trim:nth-child(n+4){padding-top:36px}
+  .trim:nth-child(n+4)::before{content:""; top:-6px; box-shadow:0 3px 7px rgba(0,0,0,.75)}}
+.trim::after{ /* sprocket edge — a strip of film, not a card */
+  content:""; position:absolute; left:9px; top:34px; bottom:16px; width:5px;
+  background-image:radial-gradient(circle at 50% 50%, var(--spool-lit) 0 1.6px, transparent 1.9px);
+  background-size:5px var(--pitch); background-repeat:repeat-y;
+  pointer-events:none;
+}
+.trim h3{margin-bottom:9px}
+.trim p{font-size:.9rem; color:var(--prose); margin-bottom:16px}
+.trim p b{color:var(--edge)}
+.trim .export-tag{border:1px solid var(--spool-lit); color:var(--edge); padding:2px 7px; font-family:var(--mono); font-size:.61rem; letter-spacing:.04em; white-space:nowrap}
+.trims-break{grid-column:1/-1; border-top:1px solid var(--spool-lit); padding-top:22px; margin-top:8px}
+.trims-break .lbl{color:var(--orange)}
+.trims-break p{max-width:66ch; margin:8px 0 0; color:var(--prose)}
+.trim .links{margin-top:auto; display:flex; gap:14px 22px; flex-wrap:wrap; align-items:baseline}
+.trim .meta{display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:14px}
+.trim .meta .num{color:var(--prose); opacity:.75}
+/* grease-pencil cross = done */
+.done{display:inline-flex; align-items:center; gap:7px; color:var(--edge); opacity:.9}
+.done svg{width:14px; height:14px; color:var(--edge)}
+.trim a.out{
+  display:inline-flex; align-items:center; gap:8px;
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.1em; font-size:.68rem;
+}
+.trim a.out.alt{color:var(--edge)}
+.trim a.out.alt:hover{color:var(--orange); text-decoration:none}
+@media (prefers-reduced-motion:no-preference){
+  .trims.hung .trim:nth-child(-n+3){animation:swing 5.5s cubic-bezier(.36,.07,.19,.97) var(--d,0s) 1}
+  @media (max-width:860px){.trims.hung .trim{animation:swing 5.5s cubic-bezier(.36,.07,.19,.97) var(--d,0s) 1}}
+  @keyframes swing{
+    0%{transform:rotate(0deg)} 12%{transform:rotate(1.5deg)} 30%{transform:rotate(-.9deg)}
+    52%{transform:rotate(.45deg)} 74%{transform:rotate(-.18deg)} 100%{transform:rotate(0deg)}
+  }
+}
+
+/* ---- 05 the analyst ---- */
+.an-grid{display:grid; grid-template-columns:1.4fr .85fr; gap:clamp(24px,4vw,52px); align-items:start; margin-top:34px}
+@media (max-width:900px){.an-grid{grid-template-columns:1fr}}
+.an-right{display:flex; flex-direction:column; gap:22px; min-width:0}
+.portrait{
+  background:var(--punched); padding:10px 10px 0;
+  box-shadow:0 18px 44px rgba(0,0,0,.6);
+  position:relative;
+}
+.portrait .plate{
+  aspect-ratio:1 / 1; background:#EFE9DE center/cover no-repeat;
+  background-image:url("assets/Sholah.png");
+  /* if the source is landscape, cover keeps the head; adjust with a positioning shift */
+  background-position:center 22%;
+}
+.portrait figcaption{
+  display:flex; justify-content:space-between; gap:14px;
+  padding:9px 3px 10px; color:#4A4642;
+  font-variation-settings:"wdth" 75,"wght" 700;
+  text-transform:uppercase; letter-spacing:.1em; font-size:.63rem;
+}
+.portrait figcaption em{font-style:normal; font-family:var(--mono); color:#7A736C; letter-spacing:.04em}
+.sheet{background:var(--punched); color:#22201E; padding:clamp(26px,3.4vw,42px); box-shadow:0 18px 44px rgba(0,0,0,.6)}
+.sheet p{color:#3A3733; font-size:1rem; max-width:62ch}
+.sheet p+p{margin-top:1em}
+
+/* ---- 06 contact: the drenched close ---- */
+.close{background:var(--orange); color:var(--on-orange); padding:clamp(58px,8vw,104px) 0; position:relative; scroll-margin-top:calc(var(--mast-h) + 12px)}
+.close::before{
+  content:""; position:absolute; top:0; left:0; right:0; height:9px;
+  background-image:linear-gradient(90deg, var(--ink) 0 10px, transparent 10px);
+  background-size:var(--pitch) 6px; background-repeat:repeat-x; background-position:center;
+}
+.close .disp{color:var(--on-orange)}
+.close p{color:var(--on-orange-soft); font-size:1.04rem; margin-top:20px}
+
+footer{background:var(--ink); border-top:1px solid var(--spool); padding:22px 0}
+footer .wrap{display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap}
+footer .num{color:var(--prose); opacity:.5}
+</style>
+</head>
+<body>
+<!--
+  THESIS: A film cutting bench, not a portfolio. Refuses the dark-terminal developer page
+  and the wall of identical service cards.
+  OWN-WORLD: True black under coarse grain; grain orange #FF5A1F holding a third of every
+  screen; punched white windows the only home for screenshots and long prose; sprocket edges
+  on rail, buttons and cells; one condensed grotesk, caps for labels, sentence case for prose;
+  mono restricted to frame numbers and measured values.
+  STORY: A buyer whose last automation broke reads the pipeline as a strip, learns what happens
+  when a job dies, opens the live product, and starts a conversation.
+  FIRST VIEWPORT: Masthead over a perforated orange rail; left, a three-line display headline
+  and two actions; right, the seven-frame pipeline strip with one frame flagged.
+  FORM: Cutting Bench Select Rail — user-pinned challenger over assigned index 6; seed 0b5aa5a9.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+<div id="leader" aria-hidden="true">
+  <div class="leader-face">
+    <div class="leader-arm"></div>
+    <div class="leader-num">
+      <span class="n">03</span>
+      <span class="n">02</span>
+      <span class="n">01</span>
+    </div>
+  </div>
+  <div class="leader-cap">FRAME LEADER · NRS</div>
+</div>
+
+<div class="grain" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-frame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <rect x="2.5" y="4.5" width="19" height="15"/><path d="M6.5 4.5v15M17.5 4.5v15"/>
+    <path d="M4.5 8h0M4.5 12h0M4.5 16h0M19.5 8h0M19.5 12h0M19.5 16h0" stroke-linecap="round" stroke-width="2.2"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="square">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8z"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+    <path d="M4.5 4.5l15 15M19.5 4.5l-15 15"/>
+  </symbol>
+</defs></svg>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="mark">
+      <svg aria-hidden="true"><use href="#i-frame"/></svg>
+      <b>NR Shalahudin</b>
+      <span class="lbl">AI Workflow Automation</span>
+    </div>
+    <p class="standing lbl"><i></i>Open to full-time · contract · freelance</p>
+    <nav class="mnav lbl" aria-label="Sections">
+      <a href="#services" data-nav="services">Services</a>
+      <a href="#cut" data-nav="cut">Sleyd</a>
+      <a href="#bin" data-nav="bin">Projects</a>
+      <a href="#analyst" data-nav="analyst">About</a>
+      <a class="btn" href="#contact">Start a project</a>
+    </nav>
+  </div>
+</header>
+
+<div class="rail" role="navigation" aria-label="Frame rail">
+  <div class="wrap">
+    <div class="ticks" id="ticks">
+      <button class="tick" data-go="bench"    aria-label="Frame 01 — the bench" aria-current="location">01</button>
+      <button class="tick" data-go="services" aria-label="Frame 02 — what I do">02</button>
+      <button class="tick" data-go="cut"      aria-label="Frame 03 — Sleyd case study">03</button>
+      <button class="tick" data-go="bin"      aria-label="Frame 04 — automation and analytics projects">04</button>
+      <button class="tick" data-go="analyst"  aria-label="Frame 05 — background">05</button>
+      <button class="tick" data-go="contact"  aria-label="Frame 06 — contact">06</button>
+      <div class="flag" id="flag" aria-hidden="true">01</div>
+    </div>
+  </div>
+</div>
+
+<main>
+
+<!-- ===== 01 ===== -->
+<section class="frame" id="bench">
+  <div class="wrap fhead">
+    <div>
+      <h1 class="disp">Automation<br>that survives<br><span class="hot">week two.</span></h1>
+    </div>
+    <div>
+      <p class="lede">Most automations work on the day they are demoed. I build the other part — the
+      retries, the guards, and the recovery path that catches a job when it dies at three in the
+      morning. Sleyd runs on one of mine, live in daily production.</p>
+      <div class="acts">
+        <a class="btn solid" href="#contact">Start a project <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <a class="btn" href="#cut">See the cut <svg aria-hidden="true"><use href="#i-play"/></svg></a>
+        <a class="btn" href="assets/Nur_Rahman_Shalahudin_AI_Automation_CV_2026.pdf" target="_blank" rel="noopener">Download CV <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap strip-band">
+      <div class="strip-rule" aria-hidden="true">
+        <span>01</span><span>02</span><span>03</span><span>04</span><span>05</span><span>06</span><span>07</span>
+      </div>
+      <div class="strip-frame">
+      <div class="strip" role="list" tabindex="0" aria-label="Sleyd production pipeline, seven stages. Scrollable.">
+        <div class="cell" role="listitem"><span class="num">01</span><b>Input</b><i>text · pdf · docx · audio</i></div>
+        <div class="cell" role="listitem"><span class="num">02</span><b>Extract</b><i>file &amp; speech to text</i></div>
+        <div class="cell" role="listitem"><span class="num">03</span><b>Guard</b><i>auth · rate · secret</i></div>
+        <div class="cell" role="listitem"><span class="num">04</span><b>Model</b><i>LLM · 4-model fallback</i></div>
+        <div class="cell" role="listitem"><span class="num">05</span><b>Clean</b><i>json repair &amp; sanitize</i></div>
+        <div class="cell flagged" role="listitem"><span class="num">06</span><b>Deploy</b><i>vercel · unique alias</i></div>
+        <div class="cell" role="listitem"><span class="num">07</span><b>Callback</b><i>confirm or recover</i></div>
+      </div>
+      </div>
+      <p class="strip-cap num">SLEYD · 5 WORKFLOWS · ~68 NODES · 27 IN THE CORE PIPELINE</p>
+  </div>
+</section>
+
+<!-- ===== 02 ===== -->
+<section class="frame field" id="services">
+  <div class="wrap">
+    <div class="fhead">
+      <h2 class="disp">What is on<br>the bench.</h2>
+      <div>
+        <p class="lede">The happy path is the easy half. What I get paid for is what a system does at
+        the moment something upstream stops answering.</p>
+      </div>
+    </div>
+    <div class="caps">
+      <div class="caprow">
+        <h3>n8n pipelines</h3>
+        <p>Webhooks, sub-workflows, async callbacks. Retries and rate limits in the first version.</p>
+      </div>
+      <div class="caprow">
+        <h3>LLM wiring</h3>
+        <p>Structured JSON output, fallback across models, and a sanitizer standing between the model and your users.</p>
+      </div>
+      <div class="caprow">
+        <h3>System integration</h3>
+        <p>Signature-checked webhooks and a backend that owns job state, so the app and the workflow never disagree about what happened.</p>
+      </div>
+      <div class="caprow">
+        <h3>Data automation</h3>
+        <p>Data profiling, cleaning, KPIs and notebook generation, from five common file formats to a reviewable output.</p>
+      </div>
+      <div class="caprow">
+        <h3>Rescue work</h3>
+        <p>Reading an automation that already broke: where it fails, what it wastes, what it costs to hold.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 03 ===== -->
+<section class="frame" id="cut">
+  <div class="wrap">
+    <div class="cut-head">
+      <h2 class="disp">Sleyd</h2>
+      <span class="band">Committed</span>
+      <span class="lbl" style="color:var(--prose)">sleyd.com &middot; live &middot; solo build</span>
+    </div>
+    <p style="font-size:1.02rem">Raw material goes in — a brief, a PDF, a voice recording — and a finished
+    interactive deck comes back at its own URL, exportable to PPTX or PDF. I designed, built, and operate
+    all of it: the interface, the backend, and the five n8n workflows that connect them.</p>
+
+    <div class="cut-grid">
+      <div class="shots">
+        <figure class="window" style="margin:0">
+          <img src="assets/sleyd-hero.png" width="1352" height="564" loading="eager" fetchpriority="high" decoding="async"
+               alt="The Sleyd home screen: a dark interface with the headline Presentations, made simple, a token balance in the header, and a button reading Load a sample pitch.">
+          <figcaption>Sleyd · signed-in home <em>fig. 01</em></figcaption>
+        </figure>
+        <figure class="window" style="margin:0">
+          <img src="assets/sleyd-input.png" width="1241" height="545" loading="eager" fetchpriority="high" decoding="async"
+               alt="The Sleyd source-material picker: a choice between Presentation Deck and Social Carousel, then four input tabs for typing, uploading a file, recording voice, or brainstorming with AI.">
+          <figcaption>Choosing the source material <em>fig. 02</em></figcaption>
+        </figure>
+      </div>
+
+      <div>
+        <div class="spec sprock">
+          <dl>
+            <dt>Orchestration</dt><dd>5 n8n workflows, ~68 nodes</dd>
+            <dt>Core pipeline</dt><dd>27 nodes</dd>
+            <dt>AI layer</dt><dd>Multi-model fallback, 4 deep</dd>
+            <dt>Backend</dt><dd>~4,800 lines, Express + Firebase</dd>
+            <dt>Input</dt><dd>Text, PDF, DOCX, audio</dd>
+            <dt>Webhooks</dt><dd>Signed, server-verified inbound calls</dd>
+            <dt>Interface</dt><dd>Indonesian, English, Arabic</dd>
+            <dt>Usage to date</dt><dd class="void">Not instrumented <span class="punch">UNAVAILABLE</span></dd>
+          </dl>
+        </div>
+
+        <div class="breaks">
+          <h3>When it breaks</h3>
+          <p>The app and the n8n workflow only agree on one thing: a job ID and a status. Sleyd writes
+          that job to its own database before n8n ever starts, so the frontend is never guessing —
+          it polls a state the backend owns, not the workflow. If n8n goes quiet for fifteen minutes,
+          the backend closes the job out on its own; if the workflow's result lands late anyway, it
+          reconciles the record instead of leaving two systems disagreeing about what happened.</p>
+        </div>
+
+        <div class="acts">
+          <a class="btn" href="https://sleyd.com" target="_blank" rel="noopener">Open Sleyd <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="btn" href="https://nr-shalahudin-ngwo.slides.sleyd.com" target="_blank" rel="noopener">Slides <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 04 ===== -->
+<section class="frame" id="bin">
+  <div class="wrap">
+    <div class="fhead">
+      <h2 class="disp">More from<br>the bench.</h2>
+      <div>
+        <p class="lede">Three exported n8n form workflows sit alongside the live Sleyd product: one for
+        presentations, one for scrollytelling, and one for data analysis. Their files show the designed
+        steps; they do not contain measured adoption or time-saved figures.</p>
+      </div>
+    </div>
+    <div class="wire" aria-hidden="true"></div>
+    <div class="trims">
+      <article class="trim" style="--d:.15s">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">n8n &middot; 35 nodes</span><span class="export-tag">WORKFLOW EXPORT</span></div>
+        <h3>Sleyd Presentation · form pipeline</h3>
+        <p><b>Problem.</b> Uploaded documents and revisions need a coherent slide plan before a page is rendered.<br>
+        <b>Built.</b> PDF, DOCX and PPTX extraction; input checks; content classification; per-slide outline review and edits; image retrieval; HTML sanitation; Vercel deployment and aliasing.<br>
+        <b>Outcome.</b> The export defines review and validation checkpoints from source material to publishable HTML. It does not report production usage.</p>
+        <div class="links"><a class="out" href="https://github.com/immunieid-code/ai-automation-workflows/blob/main/workflows/sleyd-presentation-form.json" target="_blank" rel="noopener">Source JSON <svg aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="out alt" href="#contact">Discuss workflow <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+      </article>
+      <article class="trim" style="--d:.32s">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">n8n &middot; 29 nodes</span><span class="export-tag">WORKFLOW EXPORT</span></div>
+        <h3>Sleyd Scrollytelling · form pipeline</h3>
+        <p><b>Problem.</b> A long visual story needs consistent structure across sections and room for human edits.<br>
+        <b>Built.</b> Input sanitation, AI outline review per section, edits, looped section rendering, image retrieval, HTML sanitation and a Vercel deploy path.<br>
+        <b>Outcome.</b> Planning, section rendering and publishing are separated into inspectable stages. The export does not include usage metrics.</p>
+        <div class="links"><a class="out" href="https://github.com/immunieid-code/ai-automation-workflows/blob/main/workflows/sleyd-scrollytelling-form.json" target="_blank" rel="noopener">Source JSON <svg aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="out alt" href="#contact">Discuss workflow <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+      </article>
+      <article class="trim" style="--d:.49s">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">n8n &middot; 25 nodes</span><span class="export-tag">WORKFLOW EXPORT</span></div>
+        <h3>AutoData Analyst · deck and notebook</h3>
+        <p><b>Problem.</b> Mixed data files need cleaning, profiling and KPI preparation before anyone can tell the story.<br>
+        <b>Built.</b> CSV, TSV, XLS, XLSX and JSON routing; health audit; cleaning and aggregation; AI narrative; HTML scrollytelling deck; Jupyter notebook; artifact checks and email delivery.<br>
+        <b>Outcome.</b> One form-backed design produces a visual deck and an inspectable notebook. The export does not establish runtime savings or client deployment.</p>
+        <div class="links"><a class="out" href="https://github.com/immunieid-code/ai-automation-workflows/blob/main/workflows/autodata-analyst-deck-notebook.json" target="_blank" rel="noopener">Source JSON <svg aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="out alt" href="#contact">Discuss workflow <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+      </article>
+      <div class="trims-break">
+        <span class="lbl">ANALYTICS ARCHIVE</span>
+        <p>Earlier client and campaign analysis. Public slide decks and repositories show the methods; the named client cases also appear in the <a href="https://nrshalahudin.vercel.app/notebook.html" target="_blank" rel="noopener">data portfolio</a>.</p>
+      </div>
+      <article class="trim" style="--d:.15s">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">2024 &middot; Election campaign</span>
+          <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
+        <h3>Voter database matching</h3>
+        <p>Matched two voter lists with PostgreSQL exact joins, then pg_trgm similarity at 0.55 for near matches. The 2024 campaign export contained 993 matched records across six neighborhoods; the process took minutes instead of days of manual reconciliation.</p>
+        <div class="links">
+          <a class="out" href="https://nr-shalahudin-7jnq.slides.sleyd.com" target="_blank" rel="noopener">
+            Slides <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="out alt" href="https://github.com/immunieid-code/pemilu-2024-db-matching" target="_blank" rel="noopener">
+            GitHub <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+      </article>
+      <article class="trim" style="--d:.32s">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">2026 &middot; PT Gagas Envirotek</span>
+          <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
+        <h3>Customer segmentation</h3>
+        <p>Cleaned 1,575 purchase orders for 314 accounts, then combined RFM, K-Means and 24-month CLTV. Just 71 loyal accounts generated 78.9% of analyzed revenue; account-product lists helped sales prioritize follow-up.</p>
+        <div class="links">
+          <a class="out" href="https://nr-shalahudin-sav6.slides.sleyd.com" target="_blank" rel="noopener">
+            Slides <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="out alt" href="https://github.com/immunieid-code/b2b-lab-analytics" target="_blank" rel="noopener">
+            GitHub <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+      </article>
+      <article class="trim" style="--d:.49s">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">2024 &middot; F&amp;B case study</span>
+          <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
+        <h3>Churn &amp; forecasting</h3>
+        <p>2,430 transactions analysed end to end. Churn came out at 29% against a 3.45-month average
+        customer lifetime — short enough that the recommendation became retention, not acquisition.</p>
+        <div class="links">
+          <a class="out" href="https://nr-shalahudin-47d1.slides.sleyd.com" target="_blank" rel="noopener">
+            Slides <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="out alt" href="https://github.com/immunieid-code/fnb-revenue-churn-analytics" target="_blank" rel="noopener">
+            GitHub <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+      </article>
+      <article class="trim">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">2026 &middot; PT Gagas Envirotek</span>
+          <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
+        <h3>Growth &amp; revenue simulation</h3>
+        <p>Extended PT Gagas Envirotek's segmentation with product-type and cross-sell models, 180-day retention scoring, and ARIMA/Prophet forecasts. Cross-sell AUC reached 0.97 on holdout data; the revenue scenarios remain projections.</p>
+        <div class="links">
+          <a class="out" href="https://nr-shalahudin-xdbe.slides.sleyd.com" target="_blank" rel="noopener">
+            Slides <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="out alt" href="https://github.com/immunieid-code/b2b-lab-growth-simulation" target="_blank" rel="noopener">
+            GitHub <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+      </article>
+      <article class="trim">
+        <div class="meta"><span class="lbl" style="color:var(--prose)">2026 &middot; PT Andaru Persada Mandiri</span>
+          <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
+        <h3>11-year concentration risk</h3>
+        <p>Reconciled 2013–2023 purchase-order histories to expose customer concentration and volatile annual sales. In the 2013–2017 portion, 24 accounts held 58.5% of revenue; the finding supported a core-account protection and diversification plan.</p>
+        <div class="links">
+          <a class="out" href="https://nr-shalahudin-wfie.slides.sleyd.com" target="_blank" rel="noopener">
+            Slides <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="out alt" href="https://github.com/immunieid-code/b2b-lab-revenue-concentration" target="_blank" rel="noopener">
+            GitHub <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 05 ===== -->
+<section class="frame" id="analyst">
+  <div class="wrap">
+    <h2 class="disp">Seven years<br>in a lab first.</h2>
+    <div class="an-grid">
+      <div class="sheet">
+        <p>I spent seven years as a laboratory analyst at Pertamina Lubricants, running quality control
+        to ISO and ASTM methods. The work was exact and unglamorous: you never got to claim a result,
+        you had to show the method that produced it.</p>
+        <p>That habit is most of what I brought to automation. I write down what a system should do
+        when it fails before I write what it does when it works, which is why the first thing I can
+        show you about Sleyd is how it recovers a dead job, not its homepage.</p>
+        <p>Alongside Sleyd, I analyzed B2B customer and revenue histories for PT Gagas Envirotek and
+        PT Andaru Persada Mandiri, and matched voter records for a 2024 campaign. The methods and
+        measured results are documented in my <a href="https://nrshalahudin.vercel.app/notebook.html" target="_blank" rel="noopener">data portfolio</a>.</p>
+      </div>
+      <div class="an-right">
+        <figure class="portrait">
+          <div class="plate" role="img" aria-label="Nur Rahman Shalahudin, portrait."></div>
+          <figcaption>Nur Rahman Shalahudin <em>fig. 03</em></figcaption>
+        </figure>
+        <div class="spec sprock">
+          <dl>
+            <dt>Based in</dt><dd>Depok, Indonesia</dd>
+            <dt>Works</dt><dd>Remote, freelance or contract</dd>
+            <dt>Automation</dt><dd>n8n, webhooks, async callbacks</dd>
+            <dt>Code</dt><dd>Python, TypeScript, SQL</dd>
+            <dt>Cloud</dt><dd>Firebase, Vercel, VPS + Nginx</dd>
+            <dt>Speaks</dt><dd>Indonesian, English</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ===== 06 ===== -->
+<section class="close" id="contact">
+  <div class="wrap">
+    <h2 class="disp">Got something<br>that breaks<br>quietly?</h2>
+    <p>Tell me what it does when it fails — that part is usually the interesting one. Messages come
+    straight to me, not to an inbox somebody else screens.</p>
+    <div class="acts">
+      <a class="btn onhot" href="https://wa.me/6281294652263" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="btn onhot" href="mailto:nrshalahudin@gmail.com">nrshalahudin@gmail.com</a>
+      <a class="btn onhot" href="https://linkedin.com/in/nrshalahudin" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="lbl" style="color:var(--prose); opacity:.7">© <span id="yr"></span> Nur Rahman Shalahudin</span>
+    <span class="lbl" style="color:var(--prose); opacity:.7">Built and maintained by hand</span>
+  </div>
+</footer>
+
+<div class="resume" id="resume" role="status">
+  <span class="lbl">You stopped at frame <b id="resumeNo">01</b></span>
+  <button class="go" id="resumeGo" type="button">Return</button>
+  <button id="resumeX" type="button" aria-label="Dismiss"><svg aria-hidden="true"><use href="#i-cross"/></svg></button>
+</div>
+
+<script>
+(function(){
+  var FRAMES=["bench","services","cut","bin","analyst","contact"];
+  var ticks=[].slice.call(document.querySelectorAll(".tick"));
+  var navs=[].slice.call(document.querySelectorAll("[data-nav]"));
+  var flag=document.getElementById("flag");
+  var current=-1, KEY="nrs.frame", LKEY="nrs.leader.seen";
+
+  document.getElementById("yr").textContent=new Date().getFullYear();
+
+  // ---- Leader hook: play once per session, skip on reduced motion, click to abort ----
+  var leader=document.getElementById("leader");
+  var leaderSeen=false;
+  try{ leaderSeen=sessionStorage.getItem(LKEY)==="1"; }catch(e){}
+  var reducedMotion=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function killLeader(){
+    if(!leader) return;
+    document.body.classList.add("leader-off");
+    try{ sessionStorage.setItem(LKEY,"1"); }catch(e){}
+  }
+  if(leader){
+    if(leaderSeen||reducedMotion){
+      killLeader();
+    }else{
+      // let it run its CSS beat, then remove; also let any interaction abort early
+      setTimeout(killLeader, 2100);
+      var abort=function(){ killLeader(); document.removeEventListener("click", abort); document.removeEventListener("keydown", abort); };
+      document.addEventListener("click", abort);
+      document.addEventListener("keydown", abort);
+    }
+  }
+
+  // Read the remembered frame before anything writes over it.
+  var remembered=null;
+  try{
+    var s=parseInt(localStorage.getItem(KEY),10);
+    if(!isNaN(s) && s>0 && s<FRAMES.length) remembered=s;
+  }catch(e){}
+
+  function place(i){
+    var t=ticks[i]; if(!t) return;
+    var r=t.getBoundingClientRect(), p=t.parentNode.getBoundingClientRect();
+    flag.style.left=(r.left-p.left+r.width/2)+"px";
+    flag.textContent=t.textContent;
+  }
+  function mark(i){
+    if(i===current) return;
+    current=i;
+    ticks.forEach(function(t,n){
+      if(n===i) t.setAttribute("aria-current","location"); else t.removeAttribute("aria-current");
+    });
+    navs.forEach(function(a){
+      if(a.dataset.nav===FRAMES[i]) a.setAttribute("aria-current","location"); else a.removeAttribute("aria-current");
+    });
+    place(i);
+    try{ localStorage.setItem(KEY,String(i)); }catch(e){}
+  }
+
+  // The rail reads which frame is under the bench light: the last frame whose
+  // top has passed below the rail. Deterministic, unlike ratio-based guessing.
+  var els=FRAMES.map(function(id){ return document.getElementById(id); });
+  var pending=false;
+  function resolve(){
+    pending=false;
+    var line=(document.querySelector(".rail").getBoundingClientRect().bottom)+10, i=0;
+    for(var n=0;n<els.length;n++){
+      if(els[n] && els[n].getBoundingClientRect().top<=line) i=n;
+    }
+    mark(i);
+  }
+  function onScroll(){ if(!pending){ pending=true; requestAnimationFrame(resolve); } }
+  addEventListener("scroll",onScroll,{passive:true});
+  addEventListener("resize",onScroll);
+  resolve();
+
+  var calm=matchMedia("(prefers-reduced-motion: reduce)");
+  function goTo(id){
+    var el=document.getElementById(id);
+    if(el) el.scrollIntoView({behavior:calm.matches?"auto":"smooth",block:"start"});
+  }
+  ticks.forEach(function(t){
+    t.addEventListener("click",function(){ goTo(t.dataset.go); });
+  });
+
+  // Swing the trims only once the bin is actually on screen.
+  var trims=document.querySelector(".trims");
+  if(trims && !calm.matches){
+    new IntersectionObserver(function(es,ob){
+      es.forEach(function(e){ if(e.isIntersecting){ trims.classList.add("hung"); ob.disconnect(); } });
+    },{threshold:.25}).observe(trims);
+  }
+  window.addEventListener("resize",function(){ place(current); });
+
+  // The frame you left is re-flagged on return — offered, never forced.
+  var box=document.getElementById("resume");
+  if(remembered!==null && window.scrollY<40){
+    document.getElementById("resumeNo").textContent=ticks[remembered].textContent;
+    box.classList.add("on");
+    document.getElementById("resumeGo").addEventListener("click",function(){
+      goTo(FRAMES[remembered]);
+      box.classList.remove("on");
+    });
+  }
+  document.getElementById("resumeX").addEventListener("click",function(){ box.classList.remove("on"); });
+})();
+</script>
+
+</body>
+</html>
