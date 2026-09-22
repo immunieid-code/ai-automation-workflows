@@ -494,6 +494,8 @@ a svg,button svg{width:14px; height:14px}
 .trim h3{margin-bottom:9px}
 .trim p{font-size:.9rem; color:var(--prose); margin-bottom:16px}
 .trim p b{color:var(--edge)}
+.trim p.overview{color:var(--edge); padding-bottom:12px; border-bottom:1px solid var(--spool-lit); margin-bottom:12px}
+.trim p.overview b,.case-overview b{color:var(--orange)}
 .trim .export-tag{border:1px solid var(--spool-lit); color:var(--edge); padding:2px 7px; font-family:var(--mono); font-size:.61rem; letter-spacing:.04em; white-space:nowrap}
 .trims-break{grid-column:1/-1; border-top:1px solid var(--spool-lit); padding-top:22px; margin-top:8px}
 .trims-break .lbl{color:var(--orange)}
@@ -718,7 +720,7 @@ footer .num{color:var(--prose); opacity:.5}
       <span class="band">Committed</span>
       <span class="lbl" style="color:var(--prose)">sleyd.com &middot; live &middot; solo build</span>
     </div>
-    <p style="font-size:1.02rem">Raw material goes in — a brief, a PDF, a voice recording — and a finished
+    <p class="case-overview" style="font-size:1.02rem"><b>Project Overview.</b> Raw material goes in — a brief, a PDF, a voice recording — and a finished
     interactive deck comes back at its own URL, exportable to PPTX or PDF. I designed, built, and operate
     all of it: the interface, the backend, and the five n8n workflows that connect them.</p>
 
@@ -784,6 +786,7 @@ footer .num{color:var(--prose); opacity:.5}
       <article class="trim" style="--d:.15s">
         <div class="meta"><span class="lbl" style="color:var(--prose)">n8n &middot; 35 nodes</span><span class="export-tag">WORKFLOW EXPORT</span></div>
         <h3>Sleyd Presentation · form pipeline</h3>
+        <p class="overview"><b>Project Overview.</b> An inactive form-workflow export for turning uploaded documents into a slide plan that can be reviewed before rendering and publishing.</p>
         <p><b>Problem.</b> Uploaded documents and revisions need a coherent slide plan before a page is rendered.<br>
         <b>Built.</b> PDF, DOCX and PPTX extraction; input checks; content classification; per-slide outline review and edits; image retrieval; HTML sanitation; Vercel deployment and aliasing.<br>
         <b>Outcome.</b> The export defines review and validation checkpoints from source material to publishable HTML. It does not report production usage.</p>
@@ -792,6 +795,7 @@ footer .num{color:var(--prose); opacity:.5}
       <article class="trim" style="--d:.32s">
         <div class="meta"><span class="lbl" style="color:var(--prose)">n8n &middot; 29 nodes</span><span class="export-tag">WORKFLOW EXPORT</span></div>
         <h3>Sleyd Scrollytelling · form pipeline</h3>
+        <p class="overview"><b>Project Overview.</b> An inactive form-workflow export for section-based visual stories with a human edit step between planning and rendering.</p>
         <p><b>Problem.</b> A long visual story needs consistent structure across sections and room for human edits.<br>
         <b>Built.</b> Input sanitation, AI outline review per section, edits, looped section rendering, image retrieval, HTML sanitation and a Vercel deploy path.<br>
         <b>Outcome.</b> Planning, section rendering and publishing are separated into inspectable stages. The export does not include usage metrics.</p>
@@ -800,6 +804,7 @@ footer .num{color:var(--prose); opacity:.5}
       <article class="trim" style="--d:.49s">
         <div class="meta"><span class="lbl" style="color:var(--prose)">n8n &middot; 25 nodes</span><span class="export-tag">WORKFLOW EXPORT</span></div>
         <h3>AutoData Analyst · deck and notebook</h3>
+        <p class="overview"><b>Project Overview.</b> An inactive form-workflow export for turning CSV, TSV, Excel or JSON files into a visual deck and a notebook that can be inspected.</p>
         <p><b>Problem.</b> Mixed data files need cleaning, profiling and KPI preparation before anyone can tell the story.<br>
         <b>Built.</b> CSV, TSV, XLS, XLSX and JSON routing; health audit; cleaning and aggregation; AI narrative; HTML scrollytelling deck; Jupyter notebook; artifact checks and email delivery.<br>
         <b>Outcome.</b> One form-backed design produces a visual deck and an inspectable notebook. The export does not establish runtime savings or client deployment.</p>
@@ -813,6 +818,7 @@ footer .num{color:var(--prose); opacity:.5}
         <div class="meta"><span class="lbl" style="color:var(--prose)">2024 &middot; Election campaign</span>
           <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
         <h3>Voter database matching</h3>
+        <p class="overview"><b>Project Overview.</b> A 2024 Kebayoran Lama campaign needed voter and field-contact lists linked across six kelurahan for polling-station follow-up.</p>
         <p>Matched two voter lists with PostgreSQL exact joins, then pg_trgm similarity at 0.55 for near matches. The 2024 campaign export contained 993 matched records across six neighborhoods; the process took minutes instead of days of manual reconciliation.</p>
         <div class="links">
           <a class="out" href="https://nr-shalahudin-7jnq.slides.sleyd.com" target="_blank" rel="noopener">
@@ -825,6 +831,7 @@ footer .num{color:var(--prose); opacity:.5}
         <div class="meta"><span class="lbl" style="color:var(--prose)">2026 &middot; PT Gagas Envirotek</span>
           <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
         <h3>Customer segmentation</h3>
+        <p class="overview"><b>Project Overview.</b> PT Gagas Envirotek's 2020–2025 laboratory-equipment orders were analyzed in 2026 to give sales a ranked view of accounts and product opportunities.</p>
         <p>Cleaned 1,575 purchase orders for 314 accounts, then combined RFM, K-Means and 24-month CLTV. Just 71 loyal accounts generated 78.9% of analyzed revenue; account-product lists helped sales prioritize follow-up.</p>
         <div class="links">
           <a class="out" href="https://nr-shalahudin-sav6.slides.sleyd.com" target="_blank" rel="noopener">
@@ -837,6 +844,7 @@ footer .num{color:var(--prose); opacity:.5}
         <div class="meta"><span class="lbl" style="color:var(--prose)">2024 &middot; F&amp;B case study</span>
           <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
         <h3>Churn &amp; forecasting</h3>
+        <p class="overview"><b>Project Overview.</b> This unnamed 2024 F&amp;B case connected transaction-level buying patterns with a monthly revenue outlook to guide retention priorities.</p>
         <p>2,430 transactions analysed end to end. Churn came out at 29% against a 3.45-month average
         customer lifetime — short enough that the recommendation became retention, not acquisition.</p>
         <div class="links">
@@ -850,6 +858,7 @@ footer .num{color:var(--prose); opacity:.5}
         <div class="meta"><span class="lbl" style="color:var(--prose)">2026 &middot; PT Gagas Envirotek</span>
           <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
         <h3>Growth &amp; revenue simulation</h3>
+        <p class="overview"><b>Project Overview.</b> A follow-on PT Gagas Envirotek study extended customer segmentation into cross-sell, 180-day retention and revenue-planning scenarios.</p>
         <p>Extended PT Gagas Envirotek's segmentation with product-type and cross-sell models, 180-day retention scoring, and ARIMA/Prophet forecasts. Cross-sell AUC reached 0.97 on holdout data; the revenue scenarios remain projections.</p>
         <div class="links">
           <a class="out" href="https://nr-shalahudin-xdbe.slides.sleyd.com" target="_blank" rel="noopener">
@@ -862,6 +871,7 @@ footer .num{color:var(--prose); opacity:.5}
         <div class="meta"><span class="lbl" style="color:var(--prose)">2026 &middot; PT Andaru Persada Mandiri</span>
           <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
         <h3>11-year concentration risk</h3>
+        <p class="overview"><b>Project Overview.</b> A separate study for PT Andaru Persada Mandiri used 2013–2023 purchase-order histories to test whether volatile revenue and account dependence persisted over time.</p>
         <p>Reconciled 2013–2023 purchase-order histories to expose customer concentration and volatile annual sales. In the 2013–2017 portion, 24 accounts held 58.5% of revenue; the finding supported a core-account protection and diversification plan.</p>
         <div class="links">
           <a class="out" href="https://nr-shalahudin-wfie.slides.sleyd.com" target="_blank" rel="noopener">
