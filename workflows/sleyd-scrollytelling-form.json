@@ -1,0 +1,911 @@
+{
+  "name": "Sleyd Scrollytelling - Form",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Sleyd Scrollytelling Outline",
+        "formDescription": "Susun outline scrollytelling sebelum masuk ke tahap desain section.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "rawText",
+              "fieldType": "textarea",
+              "placeholder": "Materi scrollytelling (minimal 15 karakter).",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "brandName",
+              "placeholder": "Nama brand."
+            },
+            {
+              "fieldLabel": "targetAudience",
+              "placeholder": "Audiens sasaran."
+            },
+            {
+              "fieldLabel": "persona",
+              "placeholder": "Gaya komunikasi."
+            },
+            {
+              "fieldLabel": "sectionCount",
+              "fieldType": "number",
+              "defaultValue": 5,
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "scrollStyle",
+              "fieldType": "dropdown",
+              "defaultValue": "free-flow",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "free-flow"
+                  },
+                  {
+                    "option": "snap"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "deckTheme",
+              "placeholder": "Opsional: nama tema katalog."
+            },
+            {
+              "fieldLabel": "revealStyle",
+              "fieldType": "dropdown",
+              "defaultValue": "slide-up",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "slide-up"
+                  },
+                  {
+                    "option": "tilt-3d"
+                  },
+                  {
+                    "option": "fade"
+                  },
+                  {
+                    "option": "mask-wipe"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "parallax",
+              "fieldType": "dropdown",
+              "defaultValue": "subtle",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "off"
+                  },
+                  {
+                    "option": "subtle"
+                  },
+                  {
+                    "option": "strong"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "outputLanguage",
+              "fieldType": "dropdown",
+              "defaultValue": "id",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "id"
+                  },
+                  {
+                    "option": "en"
+                  },
+                  {
+                    "option": "ar"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Generate outline scrollytelling",
+          "path": "scrollytelling-outline-form"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        928,
+        96
+      ],
+      "name": "n8n Form"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== INPUT SANITIZER — Anti Prompt Injection =====\nconst item = $input.first().json;\nconst body = item.body || item;\nconst rawMaterial = body.material || body.rawText || body.text || \"\";\n\nconst technicalPatterns = [\n    /webhookId/i, /x-real-ip/i, /user-agent/i, /\"headers\"\\s*:/i,\n    /authorization:\\s*bearer/i, /api[_-]?key\\s*[:=]/i, /access[_-]?token\\s*[:=]/i,\n    /\"typeVersion\"/i, /\"nodeGroups\"/i, /-----BEGIN .* KEY-----/i\n];\n\nfor (const pattern of technicalPatterns) {\n    if (pattern.test(rawMaterial)) {\n        throw new Error(\"REJECTED: Materi terdeteksi sebagai data teknis/sistem, bukan konten scroll.\");\n    }\n}\n\nfunction cleanStr(str, maxLen) {\n    if (!str || typeof str !== \"string\") return \"\";\n    return str\n        .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, \"\")\n        .replace(/ignore\\s+(all\\s+)?(previous|above|prior)\\s+instructions?/gi, \"[DIHAPUS]\")\n        .replace(/you\\s+are\\s+now\\s+(a\\s+)?/gi, \"[DIHAPUS] \")\n        .replace(/forget\\s+(everything|all)\\s+(you|above)/gi, \"[DIHAPUS]\")\n        .replace(/system\\s*:\\s*/gi, \"[DIHAPUS]: \")\n        .replace(/\\[INST\\]|\\[\\/INST\\]|<\\|system\\|>|<\\|user\\|>|<\\|assistant\\|>/gi, \"[DIHAPUS]\")\n        .replace(/\\{\\{/g, \"{ {\")\n        .replace(/\\}\\}/g, \"} }\")\n        .slice(0, maxLen)\n        .trim();\n}\n\nlet sanitized = cleanStr(rawMaterial, 15000);\nif (sanitized.length < 15) {\n    throw new Error(\"REJECTED: Materi terlalu pendek untuk diproses.\");\n}\n\nreturn [{\n    json: {\n        ...item,\n        _sanitized: {\n            material: sanitized,\n            brandName: cleanStr(body.brandName || \"\", 80),\n            persona: cleanStr(body.persona || \"Profesional\", 200),\n            targetAudience: cleanStr(body.targetAudience || \"Umum\", 200),\n            scrollStyle: body.scrollStyle === \"snap\" ? \"snap\" : \"free-flow\",\n            deckTheme: cleanStr(body.deckTheme || \"\", 80),\n            revealStyle: [\"slide-up\", \"tilt-3d\", \"fade\", \"mask-wipe\"].includes(body.revealStyle) ? body.revealStyle : \"slide-up\",\n            parallax: [\"off\", \"subtle\", \"strong\"].includes(body.parallax) ? body.parallax : \"subtle\",\n            sectionCount: Math.max(3, Math.min(12, parseInt(body.sectionCount || 6, 10) || 6)),\n            language: (['id','en','ar'].includes(body.language || body.outputLanguage) ? (body.language || body.outputLanguage) : 'id')\n        }\n    }\n}];"
+      },
+      "name": "Input Sanitizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Anda adalah Senior Web Editorial Designer & Scrollytelling Architect.\nTugas Anda adalah memecah materi user menjadi kerangka struktur web (Scrollytelling) yang dinamis, berwibawa, dan elegan.\n\nINFORMASI KONTEN:\n- Brand / Entitas: {{ $json._sanitized.brandName || '-' }}\n- Persona / Nada: {{ $json._sanitized.persona }}\n- Target Audiens: {{ $json._sanitized.targetAudience }}\n- Gaya Gulir: {{ $json._sanitized.scrollStyle }}\n- Tema Visual: {{ $json._sanitized.deckTheme || 'Default / Auto' }}\n\nOUTPUT JSON WAJIB MENGIKUTI SCHEMA INI DENGAN TEPAT:\n{\n  \"metadata\": {\n    \"topic\": \"Judul Utama Topik\",\n    \"language\": \"{{ $json._sanitized.language }}\"\n  },\n  \"sections\": [\n    {\n      \"n\": 1,\n      \"kind\": \"hero\",\n      \"badge\": \"INTRO\",\n      \"title\": \"Headline Halaman yang Kuat\",\n      \"subtitle\": \"Penjelasan singkat pembuka\",\n      \"narrative\": \"Teks pembuka yang menggugah...\",\n      \"highlightWords\": \"Kata Penekanan\",\n      \"imageRequired\": true,\n      \"imageKeyword\": \"thoughtful designer laptop landscape\",\n      \"keyPoints\": [],\n      \"stats\": []\n    }\n  ]\n}\n\nATURAN STRUKTUR SECTION:\n1. sections.kind WAJIB diisi SATU DARI:\n   - \"hero\"           → Section cover pembuka (layar penuh, judul display besar, kicker badge).\n   - \"sticky-media\"   → Teks narasi di kiri, visual media sticky di kanan.\n   - \"stat-reveal\"    → Metrik/KPI penting dengan angka besar dan konteks narasi.\n   - \"parallax-split\" → Dua panel kontras (masalah vs solusi, analogi, perbandingan).\n   - \"option-grid\"    → 3-4 kartu bento solusi, pilar, atau fitur utama.\n   - \"timeline-track\" → Kronologi alur langkah, fase, atau roadmap.\n   - \"closing\"        → Section penutup dengan kesimpulan / takeaway utama materi.\n2. section pertama WAJIB \"hero\".\n3. section terakhir WAJIB \"closing\".\n4. hasilkan tepat {{ $json._sanitized.sectionCount }} section.\n5. `highlightWords`: pilih 1-3 kata kunci paling penting dalam title untuk penekanan aksen 10%.\n6. `imageRequired`: boolean (true jika layout membutuhkan foto visual pendukung).\n7. `imageKeyword`: kata kunci bahasa Inggris untuk pencarian Pexels (maks 3 kata).\n8. Bahasa output: {{ $json._sanitized.language === 'en' ? 'English' : ($json._sanitized.language === 'ar' ? 'Arabic' : 'Indonesian') }}.\n\nMATERI SUMBER:\n{{ $json._sanitized.material }}"
+      },
+      "name": "LLM Architect",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1376,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "redirect",
+        "redirectUrl": "={{ $json.alias }}",
+        "options": {
+          "formTitle": "Sleyd Scrollytelling Outline"
+        }
+      },
+      "name": "Form Ending",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        3312,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-5.6-luna"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "name": "OpenAI Architect",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1376,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== ROBUST JSON CLEANER & PARSER =====\nconst item = $input.first().json;\nlet raw = item.text || item.output || item.content || item.response || item.data || item.result || item.message?.content || \"\";\nif (typeof raw === 'object') raw = JSON.stringify(raw);\nraw = String(raw || '').trim();\n\nif (!raw) {\n  for (const k of Object.keys(item)) {\n    if (typeof item[k] === 'string' && item[k].trim().length > 10) { raw = item[k]; break; }\n  }\n}\n\n// 1. Strip markdown code fences\nconst fenceMatch = raw.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);\nif (fenceMatch) {\n  raw = fenceMatch[1].trim();\n} else {\n  raw = raw.replace(/^```(?:json)?\\s*/i, \"\").replace(/\\s*```$/i, \"\").trim();\n}\n\n// 2. Normalisasi smart quotes & whitespace kontrol\nraw = raw\n  .replace(/[\\u201C\\u201D]/g, '\"')\n  .replace(/[\\u2018\\u2019]/g, \"'\")\n  .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g, \"\");\n\n// 3. Bersihkan trailing commas\nraw = raw.replace(/,\\s*([\\}\\]])/g, '$1');\n\nfunction tryParse(str) {\n  try { return JSON.parse(str); } catch (e) { return null; }\n}\n\nlet parsed = tryParse(raw);\n\nif (!parsed) {\n  const start = raw.indexOf('{');\n  const end = raw.lastIndexOf('}');\n  if (start !== -1 && end !== -1 && end > start) {\n    const candidate = raw.slice(start, end + 1).replace(/,\\s*([\\}\\]])/g, '$1');\n    parsed = tryParse(candidate);\n  }\n}\n\nif (!parsed || !parsed.sections || !Array.isArray(parsed.sections)) {\n  throw new Error(\"Gagal mengurai outline scrollytelling menjadi JSON valid: \" + raw.slice(0, 300));\n}\n\nreturn [{ json: parsed }];"
+      },
+      "name": "Parse JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "defineForm": "json",
+        "jsonOutput": "={{ JSON.stringify(($json.sections || []).flatMap((section, index) => [\n  {\n    fieldType: 'html',\n    html: `<hr><h2>Section ${index + 1}</h2><p class=\"section-help\">Edit teks untuk bagian ini. Struktur dan tipe section tetap dijaga otomatis.</p>`\n  },\n  {\n    fieldLabel: `Badge — Section ${index + 1}`,\n    fieldName: `section_${index}_badge`,\n    defaultValue: section.badge || '',\n    placeholder: 'Contoh: INTRO, INSIGHT, PENUTUP'\n  },\n  {\n    fieldLabel: `Judul — Section ${index + 1}`,\n    fieldName: `section_${index}_title`,\n    defaultValue: section.title || '',\n    requiredField: true\n  },\n  {\n    fieldLabel: `Subjudul — Section ${index + 1}`,\n    fieldName: `section_${index}_subtitle`,\n    fieldType: 'textarea',\n    defaultValue: section.subtitle || '',\n    placeholder: 'Subjudul atau penjelasan singkat section.'\n  },\n  {\n    fieldLabel: `Narasi — Section ${index + 1}`,\n    fieldName: `section_${index}_narrative`,\n    fieldType: 'textarea',\n    defaultValue: section.narrative || '',\n    placeholder: 'Narasi utama section.',\n    requiredField: true\n  }\n]).concat([\n  {\n    fieldType: 'html',\n    html: '<hr><h2>Persetujuan</h2><p class=\"section-help\">Pastikan seluruh section sudah sesuai sebelum proses desain dimulai.</p>'\n  },\n  {\n    fieldLabel: 'Persetujuan akhir',\n    fieldName: 'approval',\n    fieldType: 'checkbox',\n    fieldOptions: {\n      values: [\n        { option: 'Saya menyetujui outline ini dan ingin melanjutkan pembuatan scrollytelling' }\n      ]\n    },\n    requiredField: true\n  }\n])) }}",
+        "options": {
+          "formTitle": "Review Outline Scrollytelling",
+          "formDescription": "Periksa dan edit teks pada setiap section sebelum menyetujui proses desain.",
+          "buttonLabel": "Setujui & lanjutkan",
+          "customCss": "hr { border: 0; border-top: 1px solid #dbe3ef; margin: 32px 0 12px; }\nh2 { margin: 0 0 6px; color: #172033; font-size: 20px; line-height: 1.25; }\n.section-help { margin: 0 0 22px; color: #667085; font-size: 14px; line-height: 1.55; }\ntextarea { min-height: 112px; line-height: 1.55; resize: vertical; }\ntextarea:focus, input:focus { outline: 3px solid rgba(255, 107, 87, 0.22); outline-offset: 2px; }"
+        }
+      },
+      "name": "Review Outline per Section",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1904,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validasi persetujuan dan terapkan edit teks per section.\nconst submission = $input.first().json || {};\nconst approvalText = 'Saya menyetujui outline ini dan ingin melanjutkan pembuatan scrollytelling';\nconst approval = submission.approval;\nconst approved = Array.isArray(approval)\n  ? approval.includes(approvalText)\n  : String(approval || '') === approvalText;\n\nif (!approved) {\n  throw new Error('APPROVAL_REQUIRED: Centang persetujuan sebelum melanjutkan.');\n}\n\n// Ambil outline asli agar kind, keyPoints, stats, dan properti visual tidak hilang.\nconst source = $('Parse JSON').first().json;\nconst outline = JSON.parse(JSON.stringify(source));\n\nif (!outline || !Array.isArray(outline.sections) || outline.sections.length < 1) {\n  throw new Error('OUTLINE_INVALID: Outline sumber tidak memiliki sections yang valid.');\n}\n\nfunction cleanText(value, maxLength) {\n  return String(value ?? '')\n    .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, '')\n    .slice(0, maxLength)\n    .trim();\n}\n\noutline.sections = outline.sections.map((section, index) => {\n  const badge = cleanText(submission[`section_${index}_badge`], 80);\n  const title = cleanText(submission[`section_${index}_title`], 240);\n  const subtitle = cleanText(submission[`section_${index}_subtitle`], 600);\n  const narrative = cleanText(submission[`section_${index}_narrative`], 6000);\n\n  if (!title) {\n    throw new Error(`OUTLINE_INVALID: Judul Section ${index + 1} tidak boleh kosong.`);\n  }\n  if (!narrative) {\n    throw new Error(`OUTLINE_INVALID: Narasi Section ${index + 1} tidak boleh kosong.`);\n  }\n\n  return {\n    ...section,\n    badge,\n    title,\n    subtitle,\n    narrative\n  };\n});\n\nif (outline.sections[0]?.kind !== 'hero') {\n  throw new Error('OUTLINE_INVALID: Section pertama wajib memiliki kind hero.');\n}\nif (outline.sections.at(-1)?.kind !== 'closing') {\n  throw new Error('OUTLINE_INVALID: Section terakhir wajib memiliki kind closing.');\n}\n\nconst settings = $('Input Sanitizer').first().json._sanitized;\nreturn [{\n  json: {\n    outline,\n    renderConfig: {\n      brandName: settings.brandName,\n      persona: settings.persona,\n      targetAudience: settings.targetAudience,\n      language: settings.language,\n      scrollStyle: settings.scrollStyle,\n      deckTheme: settings.deckTheme,\n      revealStyle: settings.revealStyle,\n      parallax: settings.parallax\n    },\n    approvedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Apply Section Edits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Adapt payload dari workflow outline ke format generator lama.\nconst root = $input.first().json || {};\nconst body = root.payload || root;\nconst outline = body.outline || body.approvedOutline;\nconst cfg = body.renderConfig || {};\n\nif (!outline || !Array.isArray(outline.sections) || outline.sections.length < 1) {\n  throw new Error('SUBWORKFLOW_INPUT: payload.outline.sections wajib berupa array dan tidak boleh kosong.');\n}\n\nconst rawText = outline.sections\n  .map((section) => [section.title, section.subtitle, section.narrative].filter(Boolean).join(' '))\n  .join('\\n\\n');\n\nreturn [{\n  json: {\n    rawText,\n    material: rawText,\n    brandName: cfg.brandName || outline.metadata?.topic || 'Sleyd',\n    persona: cfg.persona || 'Profesional',\n    targetAudience: cfg.targetAudience || 'Umum',\n    outputLanguage: cfg.language || outline.metadata?.language || 'id',\n    sectionCount: outline.sections.length,\n    scrollStyle: cfg.scrollStyle || 'free-flow',\n    deckTheme: cfg.deckTheme || '',\n    typography: cfg.typography || 'Inter',\n    brandLogo: cfg.brandLogo || null,\n    coverMedia: cfg.coverMedia || null,\n    revealStyle: cfg.revealStyle || 'slide-up',\n    parallax: cfg.parallax || 'subtle',\n    sessionId: body.sessionId || '',\n    approvedAt: body.approvedAt || '',\n    approvedOutline: outline\n  }\n}];"
+      },
+      "name": "Format Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2736,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=BAHASA OUTPUT (WAJIB): {{ $('Format Fields').item.json.outputLanguage === 'en' ? 'English' : ($('Format Fields').item.json.outputLanguage === 'ar' ? 'Arabic' : 'Indonesian') }}\n\nAnda adalah **Content Classifier** untuk Sleyd Scroll — dek presentasi berbasis guliran (scrollytelling).\n\nTugas: baca MATERI di bawah, lalu balas **hanya JSON valid** berisi klasifikasi & satu field kunci `mood` yang akan dipakai untuk memilih tema visual.\n\nMATERI:\n{{ $json.material }}\n\nBRAND     : {{ $json.brandName }}\nPERSONA   : {{ $json.persona }}\nAUDIENS   : {{ $json.targetAudience }}\n\nFormat output (WAJIB persis begini, JSON polos tanpa markdown / tanpa fence):\n{\n  \"documentType\": \"<salah satu: business_report | startup_pitch | training_material | educational_content | company_profile | product_launch | proposal | research_report | roadmap | general_presentation>\",\n  \"detectedLanguage\": \"<nama bahasa mayoritas materi, mis. Indonesian / English>\",\n  \"complexity\": \"<low | medium | high>\",\n  \"mood\": \"<WAJIB salah satu PERSIS dari daftar ini — inilah yang menentukan tema visual: technology | tech | saas | fintech | premium | luxury | brand | wellness | health | nature | education | creative | editorial | consultant | corporate | professional>\",\n  \"containsStatistics\": <boolean>,\n  \"containsTimeline\":   <boolean>,\n  \"containsProcess\":    <boolean>,\n  \"containsComparison\": <boolean>,\n  \"containsKPI\":        <boolean>,\n  \"visualIntent\":  [\"<maksimal 5 kata kunci visual yang MENGGAMBARKAN materi ini spesifik, BUKAN generic 'business presentation'>\"],\n  \"imageKeywords\": [\"<maksimal 3 keyword Inggris untuk Pexels, TIAP keyword mencerminkan materi konkret ini, bukan template>\"]\n}\n\nATURAN PENTING:\n- Field `mood` WAJIB tepat salah satu label di daftar — sistem me-mapping label ini ke tema warna (mis. 'fintech' → tema biru dalam, 'wellness' → lavender lembut).\n- Pilih `mood` berdasarkan APA yang materi bahas, bukan brand-nya. Materi tentang aplikasi keuangan UMKM → `fintech`. Materi tentang klinik → `health`. Materi tentang agensi kreatif → `creative`.\n- `imageKeywords` HARUS spesifik. DILARANG default seperti 'business presentation', 'workflow process', 'content review' — itu tanda Anda mengabaikan materi.\n",
+        "batching": {}
+      },
+      "name": "Content Classifier",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        880,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-5.6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "name": "OpenAI CC",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher]\ntry {\n// ── CATALOG TEMA (12 Katalog Sleyd + Fallback) ──\nconst CATALOG = {\n    \"minimal-light\": {\n        \"mood\": \"minimalis bersih, akademik, editorial, jernih\",\n        \"isDark\": false,\n        \"bg\": \"#F9F9F6\",\n        \"bgGrad\": \"linear-gradient(180deg, #FFFFFF 0%, #F9F9F6 100%)\",\n        \"surface\": \"#FFFFFF\",\n        \"surfaceHover\": \"#FFFFFF\",\n        \"text\": \"#111111\",\n        \"textSoft\": \"#2D2D2D\",\n        \"accent\": \"#0062CC\",\n        \"accentBright\": \"#38BDF8\",\n        \"accentSoft\": \"rgba(0, 98, 204, 0.12)\",\n        \"accentRgb\": \"0, 98, 204\",\n        \"accent2Rgb\": \"14, 165, 233\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(0, 0, 0, 0.08)\",\n        \"borderHover\": \"rgba(0, 98, 204, 0.35)\",\n        \"cardShadow\": \"0 10px 30px -5px rgba(0, 0, 0, 0.05)\",\n        \"fontHeading\": \"Outfit\",\n        \"fontBody\": \"Inter\"\n    },\n    \"minimal-dark\": {\n        \"mood\": \"modern tech, SaaS, launching, futuristik\",\n        \"isDark\": true,\n        \"bg\": \"#0F172A\",\n        \"bgGrad\": \"radial-gradient(120% 90% at 50% 0%, #1E293B 0%, #0F172A 100%)\",\n        \"surface\": \"rgba(30, 41, 59, 0.7)\",\n        \"surfaceHover\": \"rgba(51, 65, 85, 0.85)\",\n        \"text\": \"#FFFFFF\",\n        \"textSoft\": \"#E4E4E7\",\n        \"accent\": \"#38BDF8\",\n        \"accentBright\": \"#38BDF8\",\n        \"accentSoft\": \"rgba(56, 189, 248, 0.18)\",\n        \"accentRgb\": \"56, 189, 248\",\n        \"accent2Rgb\": \"147, 197, 253\",\n        \"accentContrast\": \"#0F172A\",\n        \"border\": \"rgba(255, 255, 255, 0.12)\",\n        \"borderHover\": \"rgba(56, 189, 248, 0.5)\",\n        \"cardShadow\": \"0 20px 40px -10px rgba(0, 0, 0, 0.5)\",\n        \"fontHeading\": \"Space Grotesk\",\n        \"fontBody\": \"Inter\"\n    },\n    \"sleyd-blue\": {\n        \"mood\": \"profesional, teknologi, SaaS, tepercaya, ocean, bahari\",\n        \"isDark\": true,\n        \"bg\": \"#0B192C\",\n        \"bgGrad\": \"radial-gradient(120% 90% at 80% -10%, #1E3E62 0%, #0B192C 100%)\",\n        \"surface\": \"rgba(30, 58, 95, 0.6)\",\n        \"surfaceHover\": \"rgba(40, 75, 120, 0.75)\",\n        \"text\": \"#FFFFFF\",\n        \"textSoft\": \"#E4E4E7\",\n        \"accent\": \"#38BDF8\",\n        \"accentBright\": \"#38BDF8\",\n        \"accentSoft\": \"rgba(56, 189, 248, 0.2)\",\n        \"accentRgb\": \"56, 189, 248\",\n        \"accent2Rgb\": \"129, 140, 248\",\n        \"accentContrast\": \"#0B192C\",\n        \"border\": \"rgba(255, 255, 255, 0.12)\",\n        \"borderHover\": \"rgba(56, 189, 248, 0.5)\",\n        \"cardShadow\": \"0 20px 40px -10px rgba(0, 0, 0, 0.5)\",\n        \"fontHeading\": \"Space Grotesk\",\n        \"fontBody\": \"Inter\"\n    },\n    \"nature\": {\n        \"mood\": \"kesehatan, sustainability, alam, ramah lingkungan\",\n        \"isDark\": false,\n        \"bg\": \"#EFEFE8\",\n        \"bgGrad\": \"linear-gradient(180deg, #F5F5EE 0%, #EFEFE8 100%)\",\n        \"surface\": \"#FFFFFF\",\n        \"surfaceHover\": \"#FFFFFF\",\n        \"text\": \"#1C1917\",\n        \"textSoft\": \"#33322B\",\n        \"accent\": \"#166534\",\n        \"accentBright\": \"#34D399\",\n        \"accentSoft\": \"rgba(22, 101, 52, 0.14)\",\n        \"accentRgb\": \"22, 101, 52\",\n        \"accent2Rgb\": \"52, 211, 153\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(0, 0, 0, 0.08)\",\n        \"borderHover\": \"rgba(22, 101, 52, 0.4)\",\n        \"cardShadow\": \"0 10px 30px -5px rgba(0, 0, 0, 0.05)\",\n        \"fontHeading\": \"Outfit\",\n        \"fontBody\": \"Plus Jakarta Sans\"\n    },\n    \"sunset\": {\n        \"mood\": \"kreatif, startup, energetik, dinamis, peluncuran\",\n        \"isDark\": false,\n        \"bg\": \"#FFFBEB\",\n        \"bgGrad\": \"linear-gradient(180deg, #FEF3C7 0%, #FFFBEB 100%)\",\n        \"surface\": \"#FFFFFF\",\n        \"surfaceHover\": \"#FFFFFF\",\n        \"text\": \"#111111\",\n        \"textSoft\": \"#2D2D2D\",\n        \"accent\": \"#C2410C\",\n        \"accentBright\": \"#FB923C\",\n        \"accentSoft\": \"rgba(194, 65, 12, 0.14)\",\n        \"accentRgb\": \"194, 65, 12\",\n        \"accent2Rgb\": \"245, 158, 11\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(0, 0, 0, 0.08)\",\n        \"borderHover\": \"rgba(194, 65, 12, 0.4)\",\n        \"cardShadow\": \"0 10px 30px -5px rgba(194, 65, 12, 0.08)\",\n        \"fontHeading\": \"Archivo\",\n        \"fontBody\": \"Manrope\"\n    },\n    \"corporate\": {\n        \"mood\": \"keuangan, hukum, korporat formal, stabil\",\n        \"isDark\": false,\n        \"bg\": \"#F8FAFC\",\n        \"bgGrad\": \"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)\",\n        \"surface\": \"#FFFFFF\",\n        \"surfaceHover\": \"#FFFFFF\",\n        \"text\": \"#0F172A\",\n        \"textSoft\": \"#334155\",\n        \"accent\": \"#0369A1\",\n        \"accentBright\": \"#38BDF8\",\n        \"accentSoft\": \"rgba(3, 105, 161, 0.14)\",\n        \"accentRgb\": \"3, 105, 161\",\n        \"accent2Rgb\": \"79, 70, 229\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(0, 0, 0, 0.08)\",\n        \"borderHover\": \"rgba(3, 105, 161, 0.4)\",\n        \"cardShadow\": \"0 10px 30px -5px rgba(0, 0, 0, 0.05)\",\n        \"fontHeading\": \"Plus Jakarta Sans\",\n        \"fontBody\": \"Inter\"\n    },\n    \"luxury\": {\n        \"mood\": \"mewah, prestisius, investasi, real estate\",\n        \"isDark\": true,\n        \"bg\": \"#121212\",\n        \"bgGrad\": \"radial-gradient(120% 90% at 50% 0%, #242424 0%, #121212 100%)\",\n        \"surface\": \"rgba(36, 36, 36, 0.6)\",\n        \"surfaceHover\": \"rgba(50, 50, 50, 0.8)\",\n        \"text\": \"#FFFFFF\",\n        \"textSoft\": \"#E4E4E7\",\n        \"accent\": \"#EAB308\",\n        \"accentBright\": \"#FDE047\",\n        \"accentSoft\": \"rgba(234, 179, 8, 0.18)\",\n        \"accentRgb\": \"234, 179, 8\",\n        \"accent2Rgb\": \"245, 158, 11\",\n        \"accentContrast\": \"#121212\",\n        \"border\": \"rgba(234, 179, 8, 0.25)\",\n        \"borderHover\": \"rgba(234, 179, 8, 0.6)\",\n        \"cardShadow\": \"0 20px 40px -10px rgba(0, 0, 0, 0.6)\",\n        \"fontHeading\": \"Playfair Display\",\n        \"fontBody\": \"Inter\"\n    },\n    \"cyberpunk\": {\n        \"mood\": \"gaming, night mode, neon, edgy\",\n        \"isDark\": true,\n        \"bg\": \"#09090B\",\n        \"bgGrad\": \"radial-gradient(120% 90% at 50% 0%, #18181B 0%, #09090B 100%)\",\n        \"surface\": \"rgba(24, 24, 27, 0.7)\",\n        \"surfaceHover\": \"rgba(39, 39, 42, 0.85)\",\n        \"text\": \"#FFFFFF\",\n        \"textSoft\": \"#E4E4E7\",\n        \"accent\": \"#F43F5E\",\n        \"accentBright\": \"#FB7185\",\n        \"accentSoft\": \"rgba(244, 63, 94, 0.2)\",\n        \"accentRgb\": \"244, 63, 94\",\n        \"accent2Rgb\": \"251, 113, 133\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(244, 63, 94, 0.25)\",\n        \"borderHover\": \"rgba(244, 63, 94, 0.6)\",\n        \"cardShadow\": \"0 20px 40px -10px rgba(0, 0, 0, 0.6)\",\n        \"fontHeading\": \"Space Grotesk\",\n        \"fontBody\": \"Inter\"\n    },\n    \"playful\": {\n        \"mood\": \"kreatif, edukasi, ceria, ramah\",\n        \"isDark\": false,\n        \"bg\": \"#FDF4FF\",\n        \"bgGrad\": \"linear-gradient(180deg, #FAE8FF 0%, #FDF4FF 100%)\",\n        \"surface\": \"#FFFFFF\",\n        \"surfaceHover\": \"#FFFFFF\",\n        \"text\": \"#111111\",\n        \"textSoft\": \"#2D2D2D\",\n        \"accent\": \"#9333EA\",\n        \"accentBright\": \"#E879F9\",\n        \"accentSoft\": \"rgba(147, 51, 234, 0.14)\",\n        \"accentRgb\": \"147, 51, 234\",\n        \"accent2Rgb\": \"236, 72, 153\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(0, 0, 0, 0.08)\",\n        \"borderHover\": \"rgba(147, 51, 234, 0.4)\",\n        \"cardShadow\": \"0 10px 30px -5px rgba(0, 0, 0, 0.05)\",\n        \"fontHeading\": \"Outfit\",\n        \"fontBody\": \"Plus Jakarta Sans\"\n    },\n    \"rose\": {\n        \"mood\": \"lifestyle, kecantikan, wellness\",\n        \"isDark\": false,\n        \"bg\": \"#FFF1F2\",\n        \"bgGrad\": \"linear-gradient(180deg, #FFE4E6 0%, #FFF1F2 100%)\",\n        \"surface\": \"#FFFFFF\",\n        \"surfaceHover\": \"#FFFFFF\",\n        \"text\": \"#111111\",\n        \"textSoft\": \"#2D2D2D\",\n        \"accent\": \"#BE123C\",\n        \"accentBright\": \"#FB7185\",\n        \"accentSoft\": \"rgba(190, 18, 60, 0.14)\",\n        \"accentRgb\": \"190, 18, 60\",\n        \"accent2Rgb\": \"244, 63, 94\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(0, 0, 0, 0.08)\",\n        \"borderHover\": \"rgba(190, 18, 60, 0.4)\",\n        \"cardShadow\": \"0 10px 30px -5px rgba(0, 0, 0, 0.05)\",\n        \"fontHeading\": \"Fraunces\",\n        \"fontBody\": \"Plus Jakarta Sans\"\n    },\n    \"neon\": {\n        \"mood\": \"teknologi tinggi, AI, futuristik\",\n        \"isDark\": true,\n        \"bg\": \"#09090B\",\n        \"bgGrad\": \"radial-gradient(120% 90% at 50% 0%, #18181B 0%, #09090B 100%)\",\n        \"surface\": \"rgba(24, 24, 27, 0.7)\",\n        \"surfaceHover\": \"rgba(39, 39, 42, 0.85)\",\n        \"text\": \"#FFFFFF\",\n        \"textSoft\": \"#E4E4E7\",\n        \"accent\": \"#2DD4BF\",\n        \"accentBright\": \"#5EEAD4\",\n        \"accentSoft\": \"rgba(45, 212, 191, 0.2)\",\n        \"accentRgb\": \"45, 212, 191\",\n        \"accent2Rgb\": \"56, 189, 248\",\n        \"accentContrast\": \"#09090B\",\n        \"border\": \"rgba(45, 212, 191, 0.25)\",\n        \"borderHover\": \"rgba(45, 212, 191, 0.6)\",\n        \"cardShadow\": \"0 20px 40px -10px rgba(0, 0, 0, 0.6)\",\n        \"fontHeading\": \"Space Grotesk\",\n        \"fontBody\": \"Inter\"\n    },\n    \"sepia\": {\n        \"mood\": \"editorial, hangat, klasik, filosofis\",\n        \"isDark\": false,\n        \"bg\": \"#FEFCE8\",\n        \"bgGrad\": \"linear-gradient(180deg, #FEF9C3 0%, #FEFCE8 100%)\",\n        \"surface\": \"#FFFFFF\",\n        \"surfaceHover\": \"#FFFFFF\",\n        \"text\": \"#1C1917\",\n        \"textSoft\": \"#292524\",\n        \"accent\": \"#854D0E\",\n        \"accentBright\": \"#FACC15\",\n        \"accentSoft\": \"rgba(133, 77, 14, 0.14)\",\n        \"accentRgb\": \"133, 77, 14\",\n        \"accent2Rgb\": \"234, 88, 12\",\n        \"accentContrast\": \"#FFFFFF\",\n        \"border\": \"rgba(0, 0, 0, 0.08)\",\n        \"borderHover\": \"rgba(133, 77, 14, 0.4)\",\n        \"cardShadow\": \"0 10px 30px -5px rgba(0, 0, 0, 0.05)\",\n        \"fontHeading\": \"Fraunces\",\n        \"fontBody\": \"Plus Jakarta Sans\"\n    }\n};;\n\n// Aliases for backward-compatibility\nCATALOG[\"midnight-blue\"] = CATALOG[\"minimal-dark\"];\nCATALOG[\"atlantic-blue\"] = CATALOG[\"sleyd-blue\"];\nCATALOG[\"exotic-orange\"] = CATALOG[\"sunset\"];\nCATALOG[\"authentic-teal\"] = CATALOG[\"nature\"];\nCATALOG[\"sidecar-yellow\"] = CATALOG[\"sepia\"];\nCATALOG[\"soft-sky-blue\"] = CATALOG[\"corporate\"];\nCATALOG[\"masterpiece-red\"] = CATALOG[\"cyberpunk\"];\n\n// ── 1. Robust JSON Extraction from Narrative Architect ───────────────\nconst fmtJson = $('Format Fields').first().json;\nconst prepJson = $('Prep Narrative Input').first().json || fmtJson;\nconst archRaw = $input.first().json.text || $input.first().json.output || \"{}\";\n\nlet cleanArchRaw = String(archRaw).replace(/```json/gi, '').replace(/```/g, '').trim();\nconst startBracket = cleanArchRaw.indexOf('{');\nconst endBracket   = cleanArchRaw.lastIndexOf('}');\nif (startBracket !== -1 && endBracket !== -1) {\n    cleanArchRaw = cleanArchRaw.substring(startBracket, endBracket + 1);\n}\n\nlet archData = {};\ntry { archData = JSON.parse(cleanArchRaw); } catch(e) { archData = {}; }\n\nconst approvedOutline = fmtJson.approvedOutline;\nlet sections = [];\n\nif (approvedOutline && Array.isArray(approvedOutline.sections) && approvedOutline.sections.length > 0) {\n    sections = approvedOutline.sections;\n} else {\n    sections = archData.sections || [];\n}\n\nif (!sections.length) {\n    throw new Error(\"SPLIT_SECTIONS: sections array kosong atau format JSON Narrative Architect tidak terbaca.\");\n}\n\n// ── 2. Theme Resolution ──────────\nconst preferredTheme = fmtJson.deckTheme || (approvedOutline && approvedOutline.deckTheme) || \"\";\nlet themeKey = preferredTheme;\n\nif (!CATALOG[themeKey]) {\n    let ccOut = \"{}\";\n    try {\n        ccOut = prepJson.classifierRaw || $('Content Classifier').first().json.text || \"{}\";\n    } catch(e) {}\n    \n    let cleanCc = String(ccOut).replace(/```json/gi, '').replace(/```/g, '').trim();\n    const fb = cleanCc.indexOf('{');\n    const lb = cleanCc.lastIndexOf('}');\n    if (fb !== -1 && lb !== -1) cleanCc = cleanCc.substring(fb, lb + 1);\n    \n    let ccData = {};\n    try { ccData = JSON.parse(cleanCc); } catch(e) { ccData = prepJson.classifier || {}; }\n    const mood = (ccData.mood || \"technology\").toLowerCase();\n    \n    const MOOD_MAP = {\n        technology: \"champion-blue\", tech: \"champion-blue\", saas: \"atlantic-blue\", startup: \"exotic-orange\",\n        fintech: \"midnight-blue\", crypto: \"midnight-blue\", pitch: \"champion-blue\", premium: \"dirty-white\",\n        luxury: \"masterpiece-red\", brand: \"exotic-orange\",\n        wellness: \"authentic-teal\", health: \"authentic-teal\", nature: \"yellow-green-shade\",\n        education: \"sidecar-yellow\", creative: \"lavender-tonic\", editorial: \"dirty-white\",\n        consultant: \"atlantic-blue\", corporate: \"atlantic-blue\", professional: \"atlantic-blue\"\n    };\n    themeKey = MOOD_MAP[mood] || \"champion-blue\";\n}\n\nconst t = CATALOG[themeKey] || CATALOG[\"champion-blue\"];\n\n// Typography Resolution\nconst userTypography = (fmtJson.typography && fmtJson.typography !== \"Otomatis\") ? fmtJson.typography : (approvedOutline && approvedOutline.typography && approvedOutline.typography !== \"Otomatis\" ? approvedOutline.typography : \"\");\nconst fontHeading    = userTypography || t.fontHeading || \"Outfit\";\nconst fontBody       = userTypography || t.fontBody || \"Inter\";\n\nconst scrollStyle  = fmtJson.scrollStyle  || (approvedOutline && approvedOutline.scrollStyle) || \"free-flow\";\nconst revealStyle  = fmtJson.revealStyle  || (approvedOutline && approvedOutline.revealStyle) || \"slide-up\";\nconst parallax     = fmtJson.parallax     || (approvedOutline && approvedOutline.parallax) || \"subtle\";\nconst sectionCount = sections.length;\n\nconst styleVars = [\n    `--bg:${t.bg}`,\n    `--bg-grad:${t.bgGrad || t.bg}`,\n    `--surface:${t.surface}`,\n    `--surface-hover:${t.surfaceHover || t.surface}`,\n    `--text:${t.text}`,\n    `--text-soft:${t.textSoft}`,\n    `--accent:${t.accent}`,\n    `--accent-bright:${t.accentBright || t.accent}`,\n    `--accent-glow:${t.isDark ? (t.accentBright || t.accent) : t.accent}`,\n    `--accent-rgb:${t.accentRgb || \"37, 99, 235\"}`,\n    `--accent2-rgb:${t.accent2Rgb || t.accentRgb || \"79, 70, 229\"}`,\n    `--accent-contrast:${t.accentContrast || \"#FFFFFF\"}`,\n    `--border:${t.border}`,\n    `--border-hover:${t.borderHover || t.border}`,\n    `--accent-soft:${t.accentSoft || 'rgba(' + (t.accentRgb || '37,99,235') + ',0.15)'}`,\n    `--font-display:clamp(2.5rem, 1.5rem + 5vw, 5rem)`,\n    `--font-heading-size:clamp(1.85rem, 1.35rem + 2.5vw, 3rem)`,\n    `--font-body-size:clamp(1rem, 0.95rem + 0.25vw, 1.125rem)`,\n    `--font-caption:clamp(0.75rem, 0.7rem + 0.2vw, 0.875rem)`,\n    `--card-shadow:${t.cardShadow}`,\n    `--is-dark:${t.isDark ? '1' : '0'}`,\n    `--ease:cubic-bezier(.16,1,.3,1)`,\n    `--scrim-top:${t.isDark ? t.bg+'99' : t.bg+'CC'}`,\n    `--scrim-mid:${t.isDark ? t.bg+'E6' : t.bg+'F2'}`,\n    `--title-weight:${t.titleWeight || (t.isDark ? (fontHeading === 'Archivo' ? '400' : '700') : (fontHeading === 'Fraunces' ? '500' : '800'))}`,\n    `--title-tracking:${t.titleTracking || (t.isDark ? (fontHeading === 'Archivo' ? '0.06em' : '-0.02em') : (fontHeading === 'Fraunces' ? '-0.01em' : '-0.04em'))}`,\n    `--title-transform:${t.titleTransform || ((fontHeading === 'Archivo') ? 'uppercase' : 'none')}`\n].join(\";\");\n\nconst fontGoogleUrl = (() => {\n    const faces = [...new Set([fontHeading, fontBody])];\n    const faceParams = faces.map(f => `family=${f.replace(/ /g, \"+\")}:wght@400;500;600;700;800`).join(\"&\");\n    return `https://fonts.googleapis.com/css2?${faceParams}&display=swap`;\n})();\n\nconst rawMaterial = prepJson.material || $('Input Sanitizer1').first().json.material || \"\";\n\nreturn sections.map((sec, idx) => ({\n    json: {\n        // Section narrative payload\n        n:             sec.n || (idx + 1),\n        kind:          sec.kind || (idx === 0 ? \"hero\" : (idx === sections.length - 1 ? \"closing\" : \"parallax-split\")),\n        badge:         sec.badge || \"\",\n        title:         sec.title || \"\",\n        subtitle:      sec.subtitle || \"\",\n        narrative:     sec.narrative || sec.focus || \"\",\n        keyPoints:     sec.keyPoints || [],\n        stats:         sec.stats || [],\n        imageKeyword:  sec.customImageUrl ? \"\" : (sec.imageKeyword || \"modern technology clean vibrant\"),\n        imageRequired: sec.customImageUrl ? false : (sec.imageRequired !== false),\n        customImageUrl: sec.customImageUrl || undefined,\n        imageUrl:      sec.customImageUrl || sec.imageUrl || undefined,\n        chartType:     sec.chartType || \"none\",\n        chartData:     sec.chartData || null,\n        \n        // Full User Material context\n        material:      rawMaterial,\n        \n        // Design tokens\n        themeKey,\n        styleVars,\n        fontHeading,\n        fontBody,\n        fontGoogleUrl,\n        scrollStyle,\n        revealStyle,\n        parallax,\n        sectionCount,\n        isDark:        t.isDark,\n        accentColor:   t.accent,\n        \n        // Global metadata\n        brandName:         fmtJson.brandName || \"Sleyd\",\n        brandLogo:         fmtJson.brandLogo || null,\n        coverMedia:        fmtJson.coverMedia || null,\n        customSlug:        fmtJson.customSlug || \"\",\n        sessionId:         fmtJson.sessionId || \"\",\n        vercelCallbackUrl: fmtJson.vercelCallbackUrl || \"\",\n        outputLanguage:    fmtJson.outputLanguage || \"id\",\n    }\n}));\n\n} catch(__err) {\n    return [{ json: {\n        __workflowError: true,\n        node: \"Split Sections\",\n        message: (__err && __err.message) ? String(__err.message) : String(__err),\n        stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : \"\"\n    }}];\n}"
+      },
+      "name": "Split Sections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Loop Over Sections",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1680,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "data",
+              "renameField": true,
+              "outputFieldName": "html_chunks"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b02baa28-8e4f-4921-8ff6-5403c3798370",
+              "leftValue": "={{ $json.imageRequired }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1968,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.pexels.com/v1/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.imagePrompt || $json.imageKeyword || 'business presentation' }}"
+            },
+            {
+              "name": "per_page",
+              "value": "2"
+            },
+            {
+              "name": "orientation",
+              "value": "landscape"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Image Pexels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2256,
+        1088
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2480,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// [Error catcher — auto-added]\ntry {\nconst input = $json;\nconst imageUrl = input.customImageUrl || input.imageUrl || ((input.photos && Array.isArray(input.photos) && input.photos.length > 0) \n  ? (input.photos[0].src.large2x || input.photos[0].src.large) \n  : null);\n\nconst { photos, page, per_page, total_results, next_page, error, ...slideData } = input;\n\nreturn {\n  json: {\n    ...slideData,\n    imageUrl: imageUrl\n  }\n};\n} catch (__err) {\n  return [{ json: {\n    ...($json || {}),\n    imageUrl: null\n  } }];\n}"
+      },
+      "name": "Merge Image URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2656,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=BAHASA OUTPUT (WAJIB, MUTLAK): {{ $json.outputLanguage === 'en' ? 'English' : ($json.outputLanguage === 'ar' ? 'العربية' : 'Bahasa Indonesia') }}\n\nAnda adalah **Master Scrollytelling Section Designer** untuk Sleyd Scroll.\nTugas Anda adalah merakit kode HTML yang KAYA, ELEGAN, TAJAM, BERSIH, dan PROFESIONAL untuk SATU tag <section>...</section> web presentasi interaktif berbasis guliran (scrollytelling).\n\n============================================================\nOUTLINE APPROVAL PROTOCOL (MUTLAK — WAJIB DIPATUHI)\n============================================================\nSection ini telah melewati peninjauan outline pengguna (Phase 1).\n- Jika Judul tidak kosong: PAKAI PERSIS Judul di bawah ini sebagai teks headline section. JANGAN ubah kata-katanya!\n- Jika Sub-judul tidak kosong: PAKAI PERSIS sebagai sub-headline.\n- Jika Narasi Inti tidak kosong: PAKAI PERSIS sebagai narasi penjelasan utama.\n- Jika Badge tidak kosong: PAKAI PERSIS sebagai teks badge kicker di atas judul.\n- RENDER SEMUA poin di 'Poin-poin' (keyPoints) secara lengkap! Tiap poin wajib menjadi kartu mandiri yang rapi.\n- RENDER SEMUA metrik di 'Statistik' (stats) jika ada! Tiap angka KPI wajib berformat raksasa dengan data-count-to.\n- DILARANG mengarang angka baru yang tidak ada di data statistik/materi.\n\n============================================================\nDATA SECTION INI:\n============================================================\nNomor Section: {{ $json.n }} dari {{ $json.sectionCount }}\nJenis Section: {{ $json.kind }}\nBadge        : {{ $json.badge }}\nJudul        : {{ $json.title }}\nSub-judul    : {{ $json.subtitle }}\nNarasi Inti  : {{ $json.narrative }}\nPoin-poin    : {{ JSON.stringify($json.keyPoints) }}\nStatistik    : {{ JSON.stringify($json.stats) }}\nFoto URL     : {{ ($json.imageUrl && $json.imageUrl !== \"null\") ? $json.imageUrl : \"\" }}\nChart Type   : {{ $json.chartType || \"none\" }}\nChart Data   : {{ JSON.stringify($json.chartData || null) }}\nReveal Efek  : {{ $json.revealStyle || \"slide-up\" }}\nStyle Vars   : {{ $json.styleVars }}\n\n============================================================\nSTRUKTUR HTML WAJIB:\n============================================================\nHasilkan HANYA SATU tag <section>...</section> dengan format:\n<section class=\"scroll-section section-{{ $json.kind }}\" data-section-kind=\"{{ $json.kind }}\" data-nav-label=\"{{ $json.title }}\" style=\"{{ $json.styleVars }}\">\n  <div class=\"inner\">\n    <!-- Konten section sesuai kind -->\n  </div>\n</section>\n\nATURAN CONTAINER .inner:\nKontainer .inner bertindak sebagai wadah tengah (max-width: 1200px; margin: 0 auto; width: 100%).\nJANGAN memberikan style inline grid 12-kolom pada .inner itu sendiri. Gunakan class layout komponen khusus (.sm-grid, .stat-grid, .px-grid, .og-grid, .timeline-track) di dalam .inner sesuai pedoman jenis section di bawah!\n\nPENEGASAN KATA KUNCI (10% AKSEN):\nBungkus 1-2 kata penekanan paling penting dalam judul HANYA dengan:\n<span class=\"accent-text\">kata kunci</span>\nDILARANG KERAS menggunakan tag <mark> atau memberikan background box warna pada kata di judul! Teks judul harus bersih dan mengalir alami.\n\n============================================================\nPEDOMAN DESAIN LENGKAP PER JENIS SECTION:\n============================================================\n\n1. **hero** (Cover Pembuka Sinematik):\n   - Background:\n     {{ ($json.imageUrl && $json.imageUrl !== \"null\") ? '<div class=\"hero-bg\"><img src=\"' + $json.imageUrl + '\" crossorigin=\"anonymous\" alt=\"\"><div class=\"hero-scrim\"></div></div>' : '' }}\n   - Di dalam .inner:\n     <div class=\"hero-content\">\n       <span class=\"section-badge editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.badge || $json.brandName || \"OVERVIEW\" }}</span>\n       <h1 class=\"hero-title editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.title }}</h1>\n       <p class=\"hero-sub editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.narrative || $json.subtitle }}</p>\n     </div>\n   - Di luar .inner (di akhir section):\n     <div class=\"hero-scroll-cue\"><span>Gulir</span><span class=\"line\"></span></div>\n\n2. **sticky-media** (Kiri Media Visual Pinned, Kanan Narasi Bertahap):\n   - Di dalam .inner:\n     <div class=\"sm-grid\">\n       <div class=\"sm-media\">\n         {{ ($json.imageUrl && $json.imageUrl !== \"null\") ? '<img src=\"' + $json.imageUrl + '\" crossorigin=\"anonymous\" alt=\"' + $json.title + '\">' : '<div class=\"abstract-visual\"><div class=\"abstract-visual-icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z\"/></svg></div><h3 class=\"editable-text\" style=\"color:var(--text);font-size:22px;font-weight:700;margin-bottom:8px;\">' + $json.title + '</h3><p class=\"editable-text\" style=\"color:var(--text-soft);font-size:14px;max-width:32ch;\">' + ($json.subtitle || $json.badge) + '</p></div>' }}\n       </div>\n       <div class=\"sm-text\">\n         <div>\n           <span class=\"section-badge editable-text\">{{ $json.badge || \"KONTEKS\" }}</span>\n           <h2 class=\"section-title editable-text\">{{ $json.title }}</h2>\n           <p class=\"narrative-lead editable-text\">{{ $json.narrative }}</p>\n         </div>\n         <!-- Tiap poin dibuat kartu .sm-card dengan atribut data-sm-line -->\n         <!-- Render setiap item dari $json.keyPoints sebagai: -->\n         <!-- <div class=\"sm-card editable-text\" data-sm-line data-reveal=\"{{ $json.revealStyle }}\"><h3>{label}</h3><p>{desc}</p></div> -->\n       </div>\n     </div>\n\n3. **stat-reveal** (Metrik & Angka Utama):\n   - Di dalam .inner:\n     <div>\n       <span class=\"section-badge editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.badge || \"DATA & METRIK\" }}</span>\n       <h2 class=\"section-title editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.title }}</h2>\n       <p class=\"narrative-lead editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.narrative }}</p>\n     </div>\n     <div class=\"stat-grid\">\n       <!-- Render setiap item dari $json.stats sebagai: -->\n       <!-- <div class=\"stat-card editable-text\" data-reveal=\"{{ $json.revealStyle }}\"><div class=\"stat-num-wrap\"><span class=\"stat-num\" data-count-to=\"{value murni}\">{value}</span><span class=\"stat-suffix\">{suffix}</span></div><div class=\"stat-label\">{label}</div><p class=\"stat-desc\">{desc}</p></div> -->\n     </div>\n\n4. **parallax-split** (2 Kolom: Media Visual & Fitur/Pilar):\n   - Di dalam .inner:\n     <div class=\"px-grid\">\n       <div class=\"px-media\" data-parallax-fg>\n         {{ ($json.imageUrl && $json.imageUrl !== \"null\") ? '<img src=\"' + $json.imageUrl + '\" crossorigin=\"anonymous\" alt=\"' + $json.title + '\">' : '<div class=\"abstract-visual\"><div class=\"abstract-visual-icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"4\"/></svg></div><h3 class=\"editable-text\" style=\"color:var(--text);font-size:20px;font-weight:700;\">' + $json.title + '</h3></div>' }}\n       </div>\n       <div class=\"px-copy\">\n         <span class=\"section-badge editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.badge || \"FITUR UTAMA\" }}</span>\n         <h2 class=\"section-title editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.title }}</h2>\n         <p class=\"narrative-lead editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.narrative }}</p>\n         <div class=\"feature-list\">\n           <!-- Render setiap item dari $json.keyPoints sebagai: -->\n           <!-- <div class=\"feature-item editable-text\" data-reveal=\"{{ $json.revealStyle }}\"><div class=\"feature-icon-box\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M20 6 9 17l-5-5\"/></svg></div><div><h4>{label}</h4><p>{desc}</p></div></div> -->\n         </div>\n       </div>\n     </div>\n\n5. **option-grid** (Grid Bento Kartu Solusi / Komponen):\n   - Di dalam .inner:\n     <div>\n       <span class=\"section-badge editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.badge || \"ARSITEKTUR SOLUSI\" }}</span>\n       <h2 class=\"section-title editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.title }}</h2>\n       <p class=\"narrative-lead editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.narrative }}</p>\n     </div>\n     <div class=\"og-grid\">\n       <!-- Render setiap item dari $json.keyPoints sebagai: -->\n       <!-- <div class=\"og-card editable-text\" data-reveal=\"{{ $json.revealStyle }}\"><span class=\"card-tag\">{nomor urut atau kategori}</span><h3>{label}</h3><p>{desc}</p></div> -->\n     </div>\n\n6. **timeline-track** (Alur Kerja / Roadmap / Step-by-Step):\n   - Di dalam .inner:\n     <div>\n       <span class=\"section-badge editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.badge || \"PROSES & TAHAPAN\" }}</span>\n       <h2 class=\"section-title editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.title }}</h2>\n       <p class=\"narrative-lead editable-text\" data-reveal=\"{{ $json.revealStyle }}\">{{ $json.narrative }}</p>\n     </div>\n     <div class=\"timeline-track\">\n       <!-- Render setiap item dari $json.keyPoints sebagai: -->\n       <!-- <div class=\"timeline-step editable-text\" data-reveal=\"{{ $json.revealStyle }}\"><div class=\"step-indicator\"><div class=\"step-dot\"></div><span class=\"step-num\">LANGKAH 0{n}</span></div><h3>{label}</h3><p>{desc}</p></div> -->\n     </div>\n\n7. **closing** (Penutup & Kesimpulan Berwibawa):\n   - Di dalam .inner:\n     <div class=\"closing-card\" data-reveal=\"{{ $json.revealStyle }}\">\n       <span class=\"section-badge editable-text\">{{ $json.badge || \"KESIMPULAN\" }}</span>\n       <h2 class=\"closing-title editable-text\">{{ $json.title }}</h2>\n       <p class=\"closing-sub editable-text\">{{ $json.narrative || $json.subtitle }}</p>\n     </div>\n\n============================================================\nGRAFIK DATA (JIKA chartType != \"none\" dan chartData ada):\n============================================================\nJika $json.chartType bukan \"none\" dan $json.chartData tersedia:\nSisipkan wadah chart di dalam section yang relevan:\n<div class=\"chart-container\" data-reveal=\"{{ $json.revealStyle }}\">\n  <canvas class=\"chart-canvas\" data-chart-config='{{ JSON.stringify({ type: $json.chartType, title: $json.title, labels: $json.chartData?.labels, series: $json.chartData?.series }) }}'></canvas>\n</div>\n\n============================================================\nATURAN KUALITAS WAJIB (ANTI-BROKEN & ANTI-SLOP):\n============================================================\n1. SEMUA elemen teks murni (badge, h1, h2, h3, h4, p, span label) WAJIB diberi class \"editable-text\".\n2. SEMUA kartu dan grup utama WAJIB memiliki atribut \"data-reveal=\\\"{{ $json.revealStyle }}\\\"\".\n3. DILARANG KERAS membuat tag <img src=\"null\"> atau <img src=\"\">! Jika tidak ada foto, WAJIB gunakan class \"abstract-visual\" dengan ikon SVG yang telah disediakan di atas.\n4. DILARANG KERAS menghasilkan tombol Call to Action (CTA), tombol \"Mulai Sekarang\", atau tautan tombol apa pun. Presentasi ini murni storytelling konten.\n5. Jawab HANYA SATU tag <section>...</section> lengkap tanpa markdown code fence (```html), tanpa kata pengantar, tanpa penjelasan.\n\n============================================================\nOUTPUT:\n============================================================\n(Tulis kode HTML <section> di sini)",
+        "batching": {}
+      },
+      "name": "Section Designer",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        3232,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-5.6-luna"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 4000,
+          "temperature": 0.3
+        }
+      },
+      "name": "OpenAI Designer",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        3232,
+        1456
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher — auto-added]\ntry {\n// ===== SANITIZE HTML — pembersih + safety net =====\nconst item = $input.first().json;\n\nlet raw =\n  item.output ??\n  item.text ??\n  item.content ??\n  item.response ??\n  item.data ??\n  item.result ??\n  item.completion ??\n  (item.message && item.message.content) ??\n  (item.response && item.response.text) ??\n  (item.data && item.data.text) ??\n  '';\n\nif (typeof raw === 'object') raw = JSON.stringify(raw);\nraw = String(raw || '').trim();\n\nif (!raw) {\n  const fallback =\n    `<section class=\"scroll-section section-fallback p-16\" style=\"min-height:60vh;display:flex;align-items:center;justify-content:center;\">` +\n      `<div class=\"inner text-center\">` +\n        `<h2 class=\"text-2xl font-semibold mb-3 editable-text\">Bagian ini sedang dimuat...</h2>` +\n      `</div>` +\n    `</section>`;\n  return [{ json: { data: fallback } }];\n}\n\n// 1. Bersihkan sisa-sisa markdown fence\nraw = raw.replace(/```html/gi, '').replace(/```/g, '').trim();\n\n// 2. Cari titik awal HTML yang valid (<section, <div)\nconst startSection = raw.toLowerCase().indexOf('<section');\nconst startDiv     = raw.toLowerCase().indexOf('<div');\n\nlet validStartIndex = 0;\nif (startSection !== -1) validStartIndex = startSection;\nelse if (startDiv !== -1) validStartIndex = startDiv;\n\nlet cleanHtml = raw.substring(validStartIndex).trim();\n\n// 2.5 Hapus tombol Call to Action / Mulai Sekarang jika ter-generate\ncleanHtml = cleanHtml.replace(/<a\\b[^>]*class=[\"'][^\"']*\\b(?:closing-cta|cta-btn|hero-cta|cta)\\b[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/a>/gi, \"\");\ncleanHtml = cleanHtml.replace(/<button\\b[^>]*class=[\"'][^\"']*\\b(?:closing-cta|cta-btn|hero-cta|cta)\\b[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/button>/gi, \"\");\ncleanHtml = cleanHtml.replace(/<(?:a|button)\\b[^>]*>[^<]*Mulai Sekarang[^<]*<\\/(?:a|button)>/gi, \"\");\n\n// Bersihkan tag img ber-src \"null\" jika LLM sempat menulisnya\ncleanHtml = cleanHtml.replace(/<img\\b[^>]*src=[\"'](?:null|undefined|)[\"'][^>]*>/gi, \"\");\n\n// 3. AUTO-HEAL penutup tag jika terpotong\nif (cleanHtml.toLowerCase().startsWith('<section')) {\n  const openSections  = (cleanHtml.match(/<section\\b/gi) || []).length;\n  const closeSections = (cleanHtml.match(/<\\/section>/gi) || []).length;\n  for (let i = 0; i < openSections - closeSections; i++) cleanHtml += '\\n</section>';\n} else if (cleanHtml.toLowerCase().startsWith('<div')) {\n  // Jika tidak berawalan <section>, bungkus dengan section agar nav dots & GSAP bekerja normal\n  cleanHtml = `<section class=\"scroll-section\">${cleanHtml}\\n</section>`;\n}\n\nreturn [{ json: { data: cleanHtml.trim() } }];\n} catch (__err) {\n  return [{ json: {\n    __workflowError: true,\n    node: \"Sanitize HTML\",\n    message: (__err && __err.message) ? String(__err.message) : String(__err),\n    stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : ''\n  } }];\n}\n"
+      },
+      "name": "Sanitize HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3696,
+        1456
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher]\ntry {\n\n// ──────────────────────────────────────────────────────────────────────────\n// SCROLL MERGER — assembles all section HTML into a full scrollytelling page.\n// ──────────────────────────────────────────────────────────────────────────\n\nconst item = $input.first().json;\nconst htmlChunks = Array.isArray(item.html_chunks) ? item.html_chunks : [];\n\nconst errorChunk = htmlChunks.find(c => c && c.__workflowError);\nif (errorChunk) {\n    throw new Error(`SECTION_ERROR in \"${errorChunk.node}\": ${errorChunk.message}`);\n}\n\nconst sectionsHtml = htmlChunks\n    .map((c, idx) => {\n        let raw = typeof c === 'string' ? c : (c.text || c.output || c.data || \"\");\n        raw = raw.trim();\n        if (!raw) return \"\";\n        // LCP Optimization (Bab 6.A arsitektur-workflow-html.md)\n        // Section 1 (Hero) eager loading + high priority; Section 2+ lazy\n        if (idx === 0) {\n            raw = raw.replace(/<img\\b(?![^>]*\\bloading=)/gi, '<img loading=\"eager\" fetchpriority=\"high\"');\n        } else {\n            raw = raw.replace(/<img\\b(?![^>]*\\bloading=)/gi, '<img loading=\"lazy\"');\n        }\n        return raw;\n    })\n    .filter(s => s.length > 0)\n    .join(\"\\n\\n\");\n\nconst fmtFields   = $('Format Fields').first().json || {};\nconst splitFirst  = $('Split Sections').first().json || {};\n\nconst scrollStyle    = fmtFields.scrollStyle || \"free-flow\";\nconst revealStyle    = fmtFields.revealStyle || \"slide-up\";\nconst parallax       = fmtFields.parallax    || \"subtle\";\nconst brandName      = fmtFields.brandName   || \"Sleyd\";\nconst outputLanguage = fmtFields.outputLanguage || \"id\";\nconst sessionId      = fmtFields.sessionId   || \"\";\n\nconst fontHeading    = splitFirst.fontHeading || \"Space Grotesk\";\nconst fontBody       = splitFirst.fontBody    || \"Inter\";\nconst styleVars      = splitFirst.styleVars   || \"--bg:#FFFFFF;--bg-grad:linear-gradient(180deg,#F8FAFC,#FFFFFF);--surface:rgba(255,255,255,0.95);--text:#0F172A;--text-soft:#334155;--accent:#2563EB;--accent-rgb:37,99,235;--border:rgba(226,232,240,0.9);--card-shadow:0 10px 30px -5px rgba(0,0,0,0.06);--ease:cubic-bezier(.16,1,.3,1)\";\nconst fontGoogleUrl  = splitFirst.fontGoogleUrl || `https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap`;\n\nconst slug = sessionId || \"deck\";\n\nconst snapCSS = scrollStyle === \"snap\" ? `\nhtml { scroll-snap-type: y mandatory; overflow-y: scroll; }\n.scroll-section { scroll-snap-align: start; }\n` : \"\";\n\nconst N8N_UPDATE_URL_PLACEHOLDER     = '\"{{N8N_UPDATE_URL}}\"';\nconst PRESENTATION_TOKEN_PLACEHOLDER = '\"{{PRESENTATION_TOKEN}}\"';\nconst DECK_SLUG_PLACEHOLDER          = '{{DECK_SLUG}}';\n\nconst scrollLabels = {\n    id: { scroll: 'Gulir', save: 'Simpan', saving: 'Menyimpan...', saved: 'Tersimpan', editBtn: 'Edit Teks', doneBtn: 'Selesai Edit' },\n    en: { scroll: 'Scroll', save: 'Save', saving: 'Saving...', saved: 'Saved', editBtn: 'Edit Text', doneBtn: 'Done Editing' },\n    ar: { scroll: 'مرر', save: 'حفظ', saving: 'جارٍ الحفظ...', saved: 'تم الحفظ', editBtn: 'تعديل النص', doneBtn: 'إنهاء التعديل' },\n};\nconst lbl = scrollLabels[outputLanguage] || scrollLabels.id;\n\nconst html = `<!DOCTYPE html>\n<html lang=\"${outputLanguage}\" dir=\"${outputLanguage === 'ar' ? 'rtl' : 'ltr'}\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>${brandName} — Sleyd Scroll</title>\n<script>\n  window.__N8N_UPDATE_URL__     = ${N8N_UPDATE_URL_PLACEHOLDER};\n  window.__PRESENTATION_TOKEN__ = ${PRESENTATION_TOKEN_PLACEHOLDER};\n</script>\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link href=\"${fontGoogleUrl}\" rel=\"stylesheet\">\n<script src=\"https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js\"></script>\n<script src=\"https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js\"></script>\n<script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js\"></script>\n<style>\n/* ── VIEW TRANSITIONS API (Bab 4.B arsitektur-workflow-html.md) ── */\n@view-transition {\n  navigation: auto;\n}\n\n/* ── Reset & High-Definition Theme Setup ── */\n* { box-sizing: border-box; margin: 0; padding: 0; }\n:root { \n  ${styleVars}; \n  --font-heading: '${fontHeading}', sans-serif; \n  --font-body: '${fontBody}', sans-serif; \n}\nhtml { scroll-behavior: auto; overflow-x: hidden; }\nbody { \n  background: var(--bg); \n  background-image: var(--bg-grad);\n  color: var(--text); \n  font-family: var(--font-body), sans-serif; \n  -webkit-font-smoothing: antialiased; \n  -moz-osx-font-smoothing: grayscale;\n  text-rendering: optimizeLegibility;\n  overflow-x: hidden; \n  line-height: 1.65; \n}\n${snapCSS}\n\nh1, h2, h3, h4 { font-family: var(--font-heading), sans-serif; color: var(--text); line-height: 1.2; font-weight: 800; }\nimg { max-width: 100%; height: auto; }\na { color: inherit; text-decoration: none; }\n.editable-text { cursor: text; transition: outline 0.15s; }\nbody.editing-active .editable-text { outline: 2px dashed rgba(var(--accent-rgb), 0.8); outline-offset: 4px; border-radius: 6px; }\n\n/* ── Luminous Ambient Lighting (Ultra-Bright, Zero Mud/Blur) ── */\n.scroll-section::before {\n  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;\n  background: radial-gradient(85% 65% at 50% 0%, rgba(var(--accent-rgb), 0.18), transparent 70%),\n              radial-gradient(65% 50% at 85% 90%, rgba(var(--accent2-rgb), 0.14), transparent 65%);\n}\n\n/* ── Progress Rail & Dots ── */\n#scroll-rail { position: fixed; top: 0; left: 0; height: 4px; width: 0%; z-index: 2000; background: var(--accent); pointer-events: none; box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.8); }\n#section-dots { position: fixed; right: 24px; top: 50%; transform: translateY(-50%); z-index: 1900; display: flex; flex-direction: column; gap: 12px; }\nhtml[dir=\"rtl\"] #section-dots { right: auto; left: 24px; }\n.dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(var(--accent-rgb), 0.35); transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; border: 1px solid rgba(255,255,255,0.4); }\n.dot.active { background: var(--accent); transform: scale(1.6); box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.9); }\n\n/* ── Section Shell (FIXED: overflow visible so position:sticky works!) ── */\n.scroll-section { \n  position: relative; \n  min-height: 100vh; \n  min-height: 100dvh; \n  display: flex; \n  flex-direction: column;\n  justify-content: center; \n  padding: clamp(3.5rem, 7vh, 6.5rem) clamp(1.5rem, 5vw, 4rem); \n  box-sizing: border-box;\n  overflow: visible; \n  isolation: isolate; \n}\n.scroll-section .inner { \n  position: relative; \n  z-index: 2; \n  width: 100%; \n  max-width: 1200px; \n  margin: 0 auto; \n}\n\n/* ── Component Primitives (Crisp, High-Contrast, Bright) ── */\n.section-badge { \n  display: inline-flex; align-items: center; gap: 6px; \n  padding: 6px 16px; border-radius: 999px; \n  background: rgba(var(--accent-rgb), 0.15); \n  border: 1.5px solid rgba(var(--accent-rgb), 0.4); \n  color: var(--accent); \n  font-size: 12.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; \n  margin-bottom: 22px; \n  box-shadow: 0 4px 14px -3px rgba(var(--accent-rgb), 0.25);\n}\n.section-title { font-size: clamp(34px, 4.5vw, 56px); font-weight: 800; letter-spacing: -0.035em; margin-bottom: 18px; color: var(--text); line-height: 1.15; }\n.narrative-lead { font-size: clamp(17px, 1.8vw, 21px); color: var(--text-soft); max-width: 60ch; line-height: 1.7; margin-bottom: 36px; font-weight: 450; }\n\n/* ── 1. Hero Section ── */\n\n/* ── High-Contrast Hero Scrim & Typography (WCAG 2.2 AA Certified) ── */\n.section-hero .hero-title { \n  color: #FFFFFF !important; \n  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7); \n}\n.section-hero .hero-sub { \n  color: rgba(255, 255, 255, 0.92) !important; \n  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7); \n}\n.section-hero .section-badge { \n  background: rgba(255, 255, 255, 0.16) !important; \n  border: 1.5px solid rgba(255, 255, 255, 0.35) !important; \n  color: #FFFFFF !important; \n  backdrop-filter: blur(14px); \n  -webkit-backdrop-filter: blur(14px); \n  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); \n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35); \n}\n/* Keyword Emphasis with zero background box */\n.accent-text, .accent-glow { \n  color: var(--accent-bright, var(--accent)) !important; \n  font-weight: inherit; \n  text-shadow: 0 0 25px rgba(var(--accent-rgb), 0.7), 0 2px 10px rgba(0, 0, 0, 0.8); \n}\n/* Neutralize legacy <mark> tag from rendering ugly rectangular boxes */\nmark { \n  background: transparent !important; \n  color: var(--accent-bright, var(--accent)) !important; \n  padding: 0 !important; \n  font-weight: inherit; \n}\n.section-hero mark {\n  color: var(--accent-bright, #38BDF8) !important;\n  text-shadow: 0 0 25px rgba(var(--accent-rgb), 0.7), 0 2px 10px rgba(0, 0, 0, 0.8);\n}\n\n.section-hero { justify-content: center; min-height: 100vh; min-height: 100dvh; padding: clamp(3rem, 6vh, 5rem) clamp(1.5rem, 5vw, 4rem); }\n.hero-bg { position: absolute; inset: 0; z-index: 0; }\n.hero-bg img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.55) contrast(1.1); /* Darkened for 100% text readability */ }\n.hero-scrim { \n  position: absolute; inset: 0; z-index: 1; \n  background: linear-gradient(180deg, rgba(6,12,24,0.45) 0%, rgba(6,12,24,0.7) 55%, var(--bg) 100%); \n}\n.hero-content { max-width: 920px; }\n.hero-title { font-size: clamp(42px, 6.8vw, 86px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.08; max-width: 18ch; text-wrap: balance; margin-bottom: 24px; color: var(--text); }\n.hero-sub { font-size: clamp(18px, 2.1vw, 24px); color: var(--text-soft); max-width: 54ch; line-height: 1.65; font-weight: 450; }\n.hero-scroll-cue { position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 3; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-soft); display: flex; flex-direction: column; align-items: center; gap: 8px; font-weight: 700; }\n.hero-scroll-cue .line { width: 2px; height: 30px; background: var(--accent); animation: cueDraw 2.2s ease-in-out infinite; box-shadow: 0 0 10px var(--accent); }\n@keyframes cueDraw { 0% { transform: scaleY(0); transform-origin: top; } 50% { transform: scaleY(1); transform-origin: top; } 51% { transform-origin: bottom; } 100% { transform: scaleY(0); transform-origin: bottom; } }\n\n/* ── 2. Sticky Media Section (FIXED: ample min-height + true sticky media) ── */\n.section-sticky-media { padding: 0 !important; display: block !important; min-height: 160vh; overflow: visible !important; }\n.section-sticky-media .inner { max-width: 100% !important; margin: 0 !important; }\n.sm-grid { display: grid; grid-template-columns: 1.1fr 1fr; width: 100%; min-height: 160vh; position: relative; }\n.sm-media { position: sticky; top: 0; height: 100vh; height: 100dvh; overflow: hidden; background: rgba(var(--accent-rgb), 0.08); display: flex; align-items: center; justify-content: center; }\n.sm-media img { width: 100%; height: 100%; object-fit: cover; }\n.sm-media::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 65%, var(--bg) 100%); }\nhtml[dir=\"rtl\"] .sm-media::after { background: linear-gradient(270deg, transparent 65%, var(--bg) 100%); }\n.sm-text { padding: 14vh 5vw 16vh 5vw; display: flex; flex-direction: column; justify-content: center; gap: 32px; }\n.sm-card { \n  background: var(--surface); \n  border: 1.5px solid var(--border); \n  border-radius: 20px; \n  padding: 30px 28px; \n  transition: all 320ms cubic-bezier(0.16, 1, 0.3, 1); \n  opacity: 0.5; \n  transform: scale(0.97); \n  box-shadow: var(--card-shadow);\n  backdrop-filter: blur(16px);\n  -webkit-backdrop-filter: blur(16px);\n}\n.sm-card.is-active { \n  opacity: 1; \n  transform: scale(1); \n  border-color: var(--accent); \n  box-shadow: 0 16px 40px -6px rgba(var(--accent-rgb), 0.35), var(--card-shadow); \n}\n.sm-card h3 { font-size: 21px; margin-bottom: 8px; color: var(--accent); font-weight: 700; }\n.sm-card p { font-size: 15px; color: var(--text-soft); line-height: 1.6; }\n\n/* ── 3. Stat Reveal Section ── */\n.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; width: 100%; margin-top: 10px; }\n.stat-card { \n  background: var(--surface); \n  border: 1.5px solid var(--border); \n  border-radius: 24px; \n  padding: 38px 32px; \n  transition: transform 260ms var(--ease), border-color 260ms, box-shadow 260ms; \n  box-shadow: var(--card-shadow);\n  backdrop-filter: blur(16px);\n  -webkit-backdrop-filter: blur(16px);\n  display: flex;\n  flex-direction: column;\n}\n.stat-card:hover { \n  transform: translateY(-8px); \n  border-color: var(--accent); \n  box-shadow: 0 22px 48px -10px rgba(var(--accent-rgb), 0.3), var(--card-shadow); \n}\n.stat-num-wrap { display: flex; align-items: baseline; gap: 2px; }\n.stat-num { font-family: var(--font-heading), sans-serif; font-size: clamp(52px, 6.2vw, 84px); font-weight: 800; color: var(--accent); letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }\n.stat-suffix { font-family: var(--font-heading), sans-serif; font-size: clamp(32px, 3.8vw, 50px); font-weight: 800; color: var(--accent); margin-left: 2px; }\n.stat-label { font-size: 19px; font-weight: 700; color: var(--text); margin-top: 16px; margin-bottom: 8px; }\n.stat-desc { font-size: 14.5px; color: var(--text-soft); line-height: 1.6; }\n\n/* ── 4. Parallax Split Section ── */\n.px-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(36px, 5vw, 68px); align-items: center; }\n.px-media { position: relative; aspect-ratio: 4/3; border-radius: 22px; overflow: hidden; border: 1.5px solid var(--border); box-shadow: var(--card-shadow); background: rgba(var(--accent-rgb), 0.08); }\n.px-media img { width: 100%; height: 100%; object-fit: cover; }\n.feature-list { display: flex; flex-direction: column; gap: 18px; margin-top: 12px; }\n.feature-item { \n  display: flex; gap: 18px; align-items: flex-start; \n  background: var(--surface); \n  border: 1.5px solid var(--border); \n  border-radius: 18px; \n  padding: 22px 24px; \n  box-shadow: var(--card-shadow);\n  backdrop-filter: blur(16px);\n  -webkit-backdrop-filter: blur(16px);\n  transition: transform 220ms var(--ease), border-color 220ms;\n}\n.feature-item:hover { transform: translateX(6px); border-color: var(--accent); }\n.feature-icon-box { \n  width: 40px; height: 40px; border-radius: 10px; \n  background: var(--accent-soft); \n  display: flex; align-items: center; justify-content: center; \n  flex-shrink: 0; color: var(--accent); \n}\n.feature-icon-box svg { width: 20px; height: 20px; }\n.feature-item h4 { font-size: 17.5px; margin-bottom: 6px; color: var(--text); font-weight: 700; }\n.feature-item p { font-size: 14.5px; color: var(--text-soft); line-height: 1.55; }\n\n/* ── 5. Option Grid Section ── */\n.og-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 26px; }\n.og-card { \n  background: var(--surface); \n  border: 1.5px solid var(--border); \n  border-radius: 22px; \n  padding: 34px 30px; \n  transition: transform 260ms var(--ease), border-color 260ms, box-shadow 260ms; \n  box-shadow: var(--card-shadow);\n  backdrop-filter: blur(16px);\n  -webkit-backdrop-filter: blur(16px);\n  display: flex; flex-direction: column;\n}\n.og-card:hover { \n  transform: translateY(-8px); \n  border-color: var(--accent); \n  box-shadow: 0 20px 45px -10px rgba(var(--accent-rgb), 0.3), var(--card-shadow); \n}\n.card-tag { \n  align-self: flex-start; display: inline-block; \n  padding: 5px 12px; border-radius: 8px; \n  background: var(--accent-soft); color: var(--accent); \n  font-size: 11.5px; font-weight: 800; text-transform: uppercase; \n  letter-spacing: 0.08em; margin-bottom: 16px; border: 1px solid rgba(var(--accent-rgb), 0.3); \n}\n.og-card h3 { font-size: 21px; margin-bottom: 10px; color: var(--text); font-weight: 700; }\n.og-card p { font-size: 14.5px; color: var(--text-soft); line-height: 1.6; }\n\n/* ── 6. Timeline Track Section ── */\n.timeline-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 26px; position: relative; margin-top: 24px; }\n.timeline-step { \n  background: var(--surface); \n  border: 1.5px solid var(--border); \n  border-radius: 22px; \n  padding: 32px 28px; \n  position: relative; \n  box-shadow: var(--card-shadow);\n  backdrop-filter: blur(16px);\n  -webkit-backdrop-filter: blur(16px);\n  transition: transform 240ms var(--ease), border-color 240ms;\n}\n.timeline-step:hover { transform: translateY(-6px); border-color: var(--accent); }\n.step-indicator { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }\n.step-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); }\n.step-num { font-size: 12px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; }\n.timeline-step h3 { font-size: 19px; margin-bottom: 8px; color: var(--text); font-weight: 700; }\n.timeline-step p { font-size: 14px; color: var(--text-soft); line-height: 1.55; }\n\n/* ── 7. Closing Section ── */\n.section-closing { justify-content: center; text-align: center; min-height: 85vh; min-height: 85dvh; }\n.closing-card { \n  max-width: 840px; margin: 0 auto; padding: 52px 42px; \n  border-radius: 28px; background: var(--surface); \n  border: 1.5px solid var(--border); \n  box-shadow: 0 24px 60px -12px rgba(var(--accent-rgb), 0.25), var(--card-shadow); \n  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); \n}\n.closing-title { font-size: clamp(36px, 5.5vw, 70px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 20px; color: var(--text); }\n.closing-sub { color: var(--text-soft); max-width: 56ch; margin: 0 auto; font-size: 18px; line-height: 1.65; }\n.closing-cta, .hero-cta, .cta-btn, [class*=\"cta\"] { display: none !important; }\n\n/* ── Chart Container ── */\n.chart-container { \n  width: 100%; height: 320px; position: relative; margin-top: 20px; \n  background: var(--surface); border: 1.5px solid var(--border); \n  border-radius: 20px; padding: 24px; box-shadow: var(--card-shadow); \n  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); \n}\n\n/* ── Abstract Visual Fallback (When no photo available) ── */\n.abstract-visual { \n  width: 100%; height: 100%; min-height: 280px; \n  display: flex; flex-direction: column; align-items: center; justify-content: center; \n  background: radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb), 0.22), transparent 70%), \n              radial-gradient(circle at 70% 70%, rgba(var(--accent2-rgb), 0.18), transparent 70%), \n              var(--surface); \n  border: 1.5px solid var(--border); border-radius: 22px; \n  box-shadow: var(--card-shadow); position: relative; overflow: hidden; padding: 32px; text-align: center; \n}\n.abstract-visual-icon { \n  width: 60px; height: 60px; border-radius: 16px; \n  background: var(--accent-soft); color: var(--accent); \n  display: flex; align-items: center; justify-content: center; \n  margin-bottom: 16px; border: 1px solid rgba(var(--accent-rgb), 0.3); \n  box-shadow: 0 8px 24px -4px rgba(var(--accent-rgb), 0.35); \n}\n.abstract-visual-icon svg { width: 30px; height: 30px; }\n\n/* ── GSAP Reveal States ── */\n[data-reveal] { opacity: 0; }\n.reveal-arming { will-change: opacity, transform; }\n[data-reveal=\"slide-up\"] { transform: translateY(35px); }\n[data-reveal=\"tilt-3d\"] { transform: perspective(900px) rotateX(8deg) translateY(25px); }\n[data-reveal=\"fade\"] { transform: none; }\n[data-reveal=\"mask-wipe\"] { clip-path: inset(0 100% 0 0); transform: none; }\n\n/* ── Edit Toolbar ── */\n#scroll-toolbar { position: fixed; bottom: 24px; right: 24px; z-index: 3000; display: flex; gap: 10px; }\nhtml[dir=\"rtl\"] #scroll-toolbar { right: auto; left: 24px; }\n.stool-btn { padding: 10px 22px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font-size: 13.5px; font-weight: 700; cursor: pointer; -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: var(--card-shadow); transition: all 180ms; }\n.stool-btn:hover { background: var(--accent); color: var(--accent-contrast, #FFFFFF); border-color: var(--accent); }\n#edit-toggle-btn { display: block; }\n\n/* ── Responsive Mobile ── */\n@media (max-width: 860px) {\n  .scroll-section { padding: 12vw 5vw; }\n  .sm-grid { grid-template-columns: 1fr; min-height: auto; }\n  .sm-media { position: relative; height: 45vh; }\n  .sm-text { padding: 6vh 4vw; }\n  .px-grid { grid-template-columns: 1fr; gap: 36px; }\n  #section-dots { display: none; }\n}\n@media (prefers-reduced-motion: reduce) {\n  [data-reveal] { opacity: 1 !important; transform: none !important; clip-path: none !important; }\n  .hero-scroll-cue .line { animation: none; }\n}\n${fmtFields.typography && fmtFields.typography !== 'Otomatis' ? `\\n* { font-family: \"${fmtFields.typography}\", sans-serif !important; }` : ''}\n</style>\n</head>\n<body>\n\n<div id=\"scroll-rail\"></div>\n<div id=\"section-dots\"></div>\n\n${sectionsHtml}\n\n<div id=\"scroll-toolbar\">\n  <button id=\"edit-toggle-btn\" class=\"stool-btn\">${lbl.editBtn}</button>\n  <button id=\"save-btn\" class=\"stool-btn\" style=\"display:none;\">${lbl.save}</button>\n</div>\n\n<script>\n(function(){\n  gsap.registerPlugin(ScrollTrigger);\n  var rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;\n  var sections = Array.from(document.querySelectorAll('.scroll-section'));\n  var rail     = document.getElementById('scroll-rail');\n  var dotsWrap = document.getElementById('section-dots');\n\n  // progress rail\n  function updateRail(){\n    var doc = document.documentElement;\n    var pct = window.scrollY / (doc.scrollHeight - doc.clientHeight) * 100;\n    rail.style.width = Math.min(100, Math.max(0, pct)) + '%';\n  }\n  window.addEventListener('scroll', updateRail, {passive:true});\n  updateRail();\n\n  // nav dots\n  sections.forEach(function(sec, i){\n    var d = document.createElement('div');\n    d.className = 'dot';\n    d.title = sec.dataset.navLabel || ('Section ' + (i+1));\n    d.addEventListener('click', function(){\n      sec.scrollIntoView({behavior: rm ? 'auto' : 'smooth'});\n    });\n    dotsWrap.appendChild(d);\n  });\n  var dots = Array.from(dotsWrap.children);\n\n  // ===== WCAG 2.2 KEYBOARD NAVIGATION =====\n  var currentSecIdx = 0;\n  function updateCurrentSec() {\n    var mid = window.scrollY + window.innerHeight / 2;\n    for (var i = 0; i < sections.length; i++) {\n      var top = sections[i].offsetTop;\n      var h = sections[i].offsetHeight;\n      if (mid >= top && mid < top + h) { currentSecIdx = i; break; }\n    }\n  }\n  window.addEventListener('scroll', updateCurrentSec, { passive: true });\n\n  window.addEventListener('keydown', function(e) {\n    if (e.target && (e.target.isContentEditable || ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))) return;\n    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {\n      if (currentSecIdx < sections.length - 1) {\n        e.preventDefault();\n        sections[currentSecIdx + 1].scrollIntoView({ behavior: rm ? 'auto' : 'smooth' });\n      }\n    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {\n      if (currentSecIdx > 0) {\n        e.preventDefault();\n        sections[currentSecIdx - 1].scrollIntoView({ behavior: rm ? 'auto' : 'smooth' });\n      }\n    } else if (e.key === 'Home') {\n      e.preventDefault();\n      sections[0].scrollIntoView({ behavior: rm ? 'auto' : 'smooth' });\n    } else if (e.key === 'End') {\n      e.preventDefault();\n      sections[sections.length - 1].scrollIntoView({ behavior: rm ? 'auto' : 'smooth' });\n    }\n  });\n\n  if (!rm) {\n    sections.forEach(function(sec, i){\n      ScrollTrigger.create({\n        trigger: sec, start: 'top center', end: 'bottom center',\n        onToggle: function(self){ if(self.isActive) dots.forEach(function(d,j){ d.classList.toggle('active', j===i); }); }\n      });\n    });\n  } else { if(dots[0]) dots[0].classList.add('active'); }\n\n  // 1. HERO IMMEDIATE REVEAL (Never starts blank or delayed on page load!)\n  if (!rm) {\n    gsap.to('.section-hero [data-reveal]', {\n      opacity: 1, y: 0, rotationX: 0, duration: 0.85, stagger: 0.12, ease: 'power3.out',\n      onStart: function(){ document.querySelectorAll('.section-hero [data-reveal]').forEach(function(el){ el.classList.add('reveal-arming'); }); },\n      onComplete: function(){ document.querySelectorAll('.section-hero [data-reveal]').forEach(function(el){ el.classList.remove('reveal-arming'); }); }\n    });\n  } else {\n    document.querySelectorAll('.section-hero [data-reveal]').forEach(function(el){ el.style.opacity=1; el.style.transform='none'; });\n  }\n\n  // 2. SUBSEQUENT SECTIONS REVEAL WITH SCROLLTRIGGER\n  if (!rm) {\n    document.querySelectorAll('.scroll-section:not(.section-hero) [data-reveal]').forEach(function(el){\n      var type = el.dataset.reveal || 'slide-up';\n      var vars = {opacity:1, duration:0.75, ease:'power3.out',\n        onStart: function(){ el.classList.add('reveal-arming'); },\n        onComplete: function(){ el.classList.remove('reveal-arming'); }\n      };\n      if (type === 'slide-up') vars.y = 0;\n      if (type === 'tilt-3d') { vars.y = 0; vars.rotationX = 0; vars.transformPerspective = 900; }\n      if (type === 'mask-wipe') vars.clipPath = 'inset(0 0% 0 0)';\n      gsap.to(el, Object.assign(vars, {\n        scrollTrigger: { trigger: el, start: 'top 85%', toggleActions: 'play none none reverse' }\n      }));\n    });\n  } else {\n    document.querySelectorAll('.scroll-section:not(.section-hero) [data-reveal]').forEach(function(el){ el.style.opacity=1; el.style.transform='none'; });\n  }\n\n  // 3. STICKY-MEDIA ACTIVE CARD HIGHLIGHT\n  document.querySelectorAll('.section-sticky-media').forEach(function(sec){\n    var cards = sec.querySelectorAll('[data-sm-line]');\n    if (!cards.length) return;\n    if (rm) { cards.forEach(function(c){ c.classList.add('is-active'); }); return; }\n    cards.forEach(function(card){\n      ScrollTrigger.create({\n        trigger: card, start: 'top 60%', end: 'bottom 40%',\n        onEnter: function(){ card.classList.add('is-active'); },\n        onLeaveBack: function(){ card.classList.remove('is-active'); }\n      });\n    });\n  });\n\n  // 4. STAT COUNT-UP (FIXED: respects decimal points like 3.5x, 99.9%)\n  document.querySelectorAll('[data-count-to]').forEach(function(el){\n    var target = parseFloat(el.dataset.countTo);\n    var rawStr = String(el.dataset.countTo || '');\n    var decimals = rawStr.includes('.') ? (rawStr.split('.')[1].length) : 0;\n    var suffix = el.dataset.suffix || '';\n    if (isNaN(target)) return;\n    var obj = {v:0};\n    if (rm) { el.textContent = target.toFixed(decimals) + suffix; return; }\n    ScrollTrigger.create({\n      trigger: el, start: 'top 85%', once: true,\n      onEnter: function(){\n        gsap.to(obj, {v:target, duration:1.8, ease:'power2.out',\n          onUpdate: function(){ el.textContent = obj.v.toFixed(decimals) + suffix; }\n        });\n      }\n    });\n  });\n\n  // 5. PARALLAX FOREGROUND\n  if (!rm) {\n    document.querySelectorAll('[data-parallax-fg]').forEach(function(el){\n      gsap.fromTo(el, {yPercent:-5}, {yPercent:5, ease:'none', force3D:true,\n        scrollTrigger:{trigger:el.closest('.scroll-section'), start:'top bottom', end:'bottom top', scrub:0.4}\n      });\n    });\n  }\n\n  // 6. AUTO-INIT CHART.JS (When data-chart-config is present)\n  document.querySelectorAll('.chart-canvas[data-chart-config]').forEach(function(canvas){\n    try {\n      var cfg = JSON.parse(canvas.dataset.chartConfig);\n      var accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#2563EB';\n      new Chart(canvas, {\n        type: cfg.type || 'bar',\n        data: {\n          labels: cfg.labels || [],\n          datasets: [{\n            label: cfg.title || '',\n            data: (cfg.series && cfg.series[0] && cfg.series[0].data) ? cfg.series[0].data : (cfg.series || []),\n            backgroundColor: accentColor,\n            borderRadius: 8\n          }]\n        },\n        options: {\n          responsive: true,\n          maintainAspectRatio: false,\n          plugins: { legend: { display: !!cfg.title } }\n        }\n      });\n    } catch(e) { console.warn('Chart init error:', e); }\n  });\n\n  // 7. EDIT IN PLACE\n  var editToggleBtn = document.getElementById('edit-toggle-btn');\n  var saveBtn       = document.getElementById('save-btn');\n  var isEditMode    = false;\n\n  function toggleEditMode(){\n    isEditMode = !isEditMode;\n    document.querySelectorAll('.editable-text').forEach(function(el){\n      el.contentEditable = isEditMode ? 'true' : 'false';\n    });\n    document.body.classList.toggle('editing-active', isEditMode);\n    editToggleBtn.textContent = isEditMode ? '${lbl.doneBtn}' : '${lbl.editBtn}';\n    saveBtn.style.display = isEditMode ? 'block' : 'none';\n  }\n\n  async function saveChanges(){\n    saveBtn.textContent = '${lbl.saving}';\n    saveBtn.disabled = true;\n    var n8nUrl = window.__N8N_UPDATE_URL__;\n    var token  = window.__PRESENTATION_TOKEN__;\n    if (!n8nUrl) { saveBtn.textContent = 'Config error'; saveBtn.disabled = false; return; }\n    try {\n      var bodyHtml = document.body.innerHTML;\n      var hdr = {'Content-Type':'application/json'};\n      if (token) hdr['x-presentation-token'] = token;\n      var resp = await fetch(n8nUrl, {\n        method: 'POST', headers: hdr,\n        body: JSON.stringify({ slug: window.location.hostname.split('.')[0], htmlContent: bodyHtml })\n      });\n      if (resp.ok) {\n        saveBtn.textContent = '${lbl.saved}';\n        setTimeout(function(){ location.reload(); }, 1200);\n      } else { throw new Error('fail'); }\n    } catch(e) {\n      saveBtn.textContent = 'Gagal, coba lagi';\n      saveBtn.disabled = false;\n    }\n  }\n\n  editToggleBtn.addEventListener('click', toggleEditMode);\n  saveBtn.addEventListener('click', saveChanges);\n  ScrollTrigger.refresh();\n})();\n</script>\n\n<!-- Sleyd badge -->\n<a id=\"__sleyd_badge__\" href=\"https://sleyd.com/?ref=badge&utm_source=scroll_deck&deck_id=${DECK_SLUG_PLACEHOLDER}\" target=\"_blank\" rel=\"noopener nofollow\">\n  <svg viewBox=\"0 0 100 100\" width=\"13\" height=\"13\" aria-hidden=\"true\"><path d=\"M0 0 H100 V34 L0 58 Z\" fill=\"#FF4A1C\"/><path d=\"M0 66 L100 42 V100 H0 Z\" fill=\"#FF4A1C\"/></svg>\n  <span>Made with <strong>Sleyd</strong></span>\n</a>\n<style>\n#__sleyd_badge__{position:fixed;bottom:14px;left:14px;z-index:2147483647;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;background:rgba(15,23,42,0.85);color:#F8FAFC;font:700 12px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;text-decoration:none;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:all 140ms ease;box-shadow:0 6px 18px -4px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,0.15);}\n#__sleyd_badge__:hover{background:rgba(15,23,42,0.98);transform:translateY(-1px);}\n@media print{#__sleyd_badge__{display:none!important;}}\n</style>\n</body>\n</html>`;\n\nreturn [{ json: { data: html, slug: slug, sessionId } }];\n\n} catch(__err) {\n  return [{ json: {\n    __workflowError: true,\n    node: \"Scroll Merger\",\n    message: (__err && __err.message) ? String(__err.message) : String(__err),\n    stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : \"\"\n  } }];\n}\n"
+      },
+      "name": "Scroll Merger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fmtJson  = $('Format Fields').first().json;\nconst customSlug = (fmtJson.customSlug || \"\").trim().replace(/[^a-z0-9-]/g,\"\").slice(0,40);\nconst brandName  = fmtJson.brandName || 'scroll';\n\nfunction slugify(text) {\n    return text.toString().toLowerCase().trim()\n        .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')\n        .replace(/[^a-z0-9\\s-]/g, '').replace(/\\s+/g, '-').replace(/-+/g, '-').substring(0, 30);\n}\nfunction randomSuffix(n=4) {\n    const c = 'abcdefghijklmnopqrstuvwxyz0123456789';\n    let r=''; for(let i=0;i<n;i++) r+=c[Math.floor(Math.random()*c.length)]; return r;\n}\n\nconst suffix = randomSuffix();\n// Custom slug wins if valid; fall back to brand-based\nconst baseSlug = (customSlug.length >= 3) ? customSlug : (slugify(brandName) || 'scroll');\nconst slug  = baseSlug + '-' + suffix;\nconst alias = slug + '.slides.sleyd.com';\n\nreturn [{ json: { ...$input.first().json, slug, alias } }];\n"
+      },
+      "name": "Generate Slug",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"personaslides-web\",\n  \"files\": [\n    {\n      \"file\": \"index.html\",\n      \"data\": {{ JSON.stringify($json.data) }}\n    }\n  ],\n  \"projectSettings\": {\n    \"framework\": null,\n    \"buildCommand\": null,\n    \"installCommand\": null,\n    \"outputDirectory\": null,\n    \"devCommand\": null\n  }\n}",
+        "options": {}
+      },
+      "name": "Vercel Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2720,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2928,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.vercel.com/v2/deployments/{{ $json.id || $json.uid }}/aliases",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"alias\": \"{{ $('Generate Slug').item.json.alias }}\"\n}",
+        "options": {}
+      },
+      "name": "Vercel Alias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3136,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher]\ntry {\n// 1. Ekstrak output dari Content Classifier\nconst ccRaw = $input.first().json.text || $input.first().json.output || \"{}\";\nlet ccClean = String(ccRaw).replace(/```json/gi, '').replace(/```/g, '').trim();\nconst fb = ccClean.indexOf('{');\nconst lb = ccClean.lastIndexOf('}');\nif (fb !== -1 && lb !== -1) {\n    ccClean = ccClean.substring(fb, lb + 1);\n}\n\nlet classifierData = {};\ntry { classifierData = JSON.parse(ccClean); } catch(e) { classifierData = {}; }\n\n// 2. Ambil data materi asli & metadata lengkap dari Input Sanitizer & Format Fields\nconst sanitized = $('Input Sanitizer1').first().json || {};\nconst formatted = $('Format Fields').first().json || {};\n\nconst material = sanitized.material || formatted.rawText || formatted.material || \"\";\nconst brandName = formatted.brandName || \"Sleyd\";\nconst persona = formatted.persona || \"Profesional\";\nconst targetAudience = formatted.targetAudience || \"Umum\";\nconst sectionCount = Number(formatted.sectionCount) || 5;\nconst outputLanguage = formatted.outputLanguage || \"id\";\nconst approvedOutline = formatted.approvedOutline || null;\n\nreturn [{\n    json: {\n        ...formatted,\n        ...sanitized,\n        material,\n        brandName,\n        persona,\n        targetAudience,\n        sectionCount,\n        outputLanguage,\n        approvedOutline,\n        classifier: classifierData,\n        classifierRaw: ccRaw,\n    }\n}];\n} catch (__err) {\n    return [{ json: {\n        __workflowError: true,\n        node: \"Prep Narrative Input\",\n        message: (__err && __err.message) ? String(__err.message) : String(__err),\n        stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : ''\n    }}];\n}\n"
+      },
+      "name": "Prep Narrative Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        1152
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2992,
+        1296
+      ],
+      "name": "Gabungan True & False"
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher — auto-added]\ntry {\n// ===== INPUT SANITIZER — Anti Prompt Injection =====\nconst item = $input.first().json;\n\nfunction cleanStr(str, maxLen) {\n    if (!str || typeof str !== \"string\") return \"\";\n    return str\n        .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, \"\")\n        .replace(/ignore\\s+(all\\s+)?(previous|above|prior)\\s+instructions?/gi, \"[DIHAPUS]\")\n        .replace(/you\\s+are\\s+now\\s+(a\\s+)?/gi, \"[DIHAPUS] \")\n        .replace(/forget\\s+(everything|all)\\s+(you|above)/gi, \"[DIHAPUS]\")\n        .replace(/system\\s*:\\s*/gi, \"[DIHAPUS]: \")\n        .replace(/\\[INST\\]|\\[\\/INST\\]|<\\|system\\|>|<\\|user\\|>|<\\|assistant\\|>/gi, \"[DIHAPUS]\")\n        .replace(/\\{\\{/g, \"{ {\")\n        .replace(/\\}\\}/g, \"} }\")\n        .slice(0, maxLen)\n        .trim();\n}\n\nconst technicalPatterns = [\n    /webhookId/i, /x-real-ip/i, /user-agent/i, /\"headers\"\\s*:/i,\n    /authorization:\\s*bearer/i, /api[_-]?key\\s*[:=]/i, /access[_-]?token\\s*[:=]/i,\n    /\"typeVersion\"/i, /\"nodeGroups\"/i, /-----BEGIN .* KEY-----/i\n];\n\n// Check approvedOutline directly on item or formatted input\nconst approvedOutlinePresent = !!(\n    (item.approvedOutline && Array.isArray(item.approvedOutline.sections) && item.approvedOutline.sections.length > 0) ||\n    (item.approvedOutline && Array.isArray(item.approvedOutline.slides) && item.approvedOutline.slides.length > 0)\n);\n\nconst rawInputMaterial = item.material || item.rawText || (approvedOutlinePresent && Array.isArray(item.approvedOutline.sections) \n    ? item.approvedOutline.sections.map(s => (s.title || '') + ' ' + (s.narrative || '')).join(' ') \n    : \"\");\n\nfor (const pattern of technicalPatterns) {\n    if (pattern.test(rawInputMaterial)) {\n        throw new Error(\"REJECTED: Materi terdeteksi sebagai data teknis/sistem, bukan konten presentasi.\");\n    }\n}\n\nlet sanitizedMaterial = cleanStr(rawInputMaterial, 25000);\n\nif (sanitizedMaterial.length < 15) {\n    throw new Error(\"REJECTED: Materi terlalu pendek untuk diproses.\");\n}\n\n// Sanitize approvedOutline sections if present\nlet sanitizedApprovedOutline = item.approvedOutline;\nif (sanitizedApprovedOutline && typeof sanitizedApprovedOutline === 'object') {\n    if (Array.isArray(sanitizedApprovedOutline.sections)) {\n        sanitizedApprovedOutline.sections = sanitizedApprovedOutline.sections.map(s => ({\n            ...s,\n            title: cleanStr(s.title || \"\", 200),\n            narrative: cleanStr(s.narrative || \"\", 5000),\n            kind: cleanStr(s.kind || \"\", 80)\n        }));\n    }\n}\n\n// Clean common text metadata\nconst sanitizedBrandName = cleanStr(item.brandName || \"\", 80);\nconst sanitizedPersona = cleanStr(item.persona || \"Profesional\", 200);\nconst sanitizedTargetAudience = cleanStr(item.targetAudience || \"Umum\", 200);\n\nreturn [{\n    json: {\n        ...item,\n        material: sanitizedMaterial,\n        rawText: sanitizedMaterial,\n        brandName: sanitizedBrandName,\n        persona: sanitizedPersona,\n        targetAudience: sanitizedTargetAudience,\n        ...(sanitizedApprovedOutline ? { approvedOutline: sanitizedApprovedOutline } : {})\n    }\n}];\n} catch (__err) {\n  return [{ json: {\n    __workflowError: true,\n    node: \"Input Sanitizer\",\n    message: (__err && __err.message) ? String(__err.message) : String(__err),\n    stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : ''\n  } }];\n}"
+      },
+      "name": "Input Sanitizer1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        1152
+      ]
+    }
+  ],
+  "connections": {
+    "n8n Form": {
+      "main": [
+        [
+          {
+            "node": "Input Sanitizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Sanitizer": {
+      "main": [
+        [
+          {
+            "node": "LLM Architect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Architect": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Architect": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LLM Architect",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON": {
+      "main": [
+        [
+          {
+            "node": "Review Outline per Section",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Outline per Section": {
+      "main": [
+        [
+          {
+            "node": "Apply Section Edits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Section Edits": {
+      "main": [
+        [
+          {
+            "node": "Format Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Fields": {
+      "main": [
+        [
+          {
+            "node": "Input Sanitizer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Classifier": {
+      "main": [
+        [
+          {
+            "node": "Prep Narrative Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI CC": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Content Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Sections": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Sections": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Scroll Merger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Fetch Image Pexels",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Gabungan True & False",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Image Pexels": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Merge Image URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Image URL": {
+      "main": [
+        [
+          {
+            "node": "Gabungan True & False",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Section Designer": {
+      "main": [
+        [
+          {
+            "node": "Sanitize HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Designer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Section Designer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize HTML": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scroll Merger": {
+      "main": [
+        [
+          {
+            "node": "Generate Slug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Slug": {
+      "main": [
+        [
+          {
+            "node": "Vercel Deploy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vercel Deploy": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Vercel Alias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vercel Alias": {
+      "main": [
+        [
+          {
+            "node": "Form Ending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Narrative Input": {
+      "main": [
+        [
+          {
+            "node": "Split Sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gabungan True & False": {
+      "main": [
+        [
+          {
+            "node": "Section Designer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Sanitizer1": {
+      "main": [
+        [
+          {
+            "node": "Content Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "active": false
+}

@@ -1,0 +1,1104 @@
+{
+  "name": "Sleyd Presentation — Form",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"personaslides-web\",\n  \"files\": [\n    {\n      \"file\": \"index.html\",\n      \"data\": {{ JSON.stringify($json.data) }}\n    }\n  ],\n  \"projectSettings\": {\n    \"framework\": null,\n    \"buildCommand\": null,\n    \"installCommand\": null,\n    \"outputDirectory\": null,\n    \"devCommand\": null\n  }\n}",
+        "options": {}
+      },
+      "name": "Vercel Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1472,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher — auto-added]\ntry {\n// ===== FINAL MERGER =====\n// Gabungkan semua output slide menjadi satu HTML siap deploy.\n\nconst inputItems = $input.all();\nlet combinedSlides = \"\";\n\nfunction balanceDivs(html) {\n    const tagRegex = /<div\\b[^>]*>|<\\/div>/gi;\n    let stack = 0, match;\n    const toRemove = [];\n    while ((match = tagRegex.exec(html)) !== null) {\n        if (match[0].toLowerCase() === '</div>') {\n            if (stack > 0) { stack--; }\n            else { toRemove.push({ start: match.index, end: match.index + match[0].length }); }\n        } else { stack++; }\n    }\n    let result = html;\n    for (let i = toRemove.length - 1; i >= 0; i--) {\n        result = result.slice(0, toRemove[i].start) + result.slice(toRemove[i].end);\n    }\n    if (stack > 0) result += \"</div>\".repeat(stack);\n    return result;\n}\n\n// ===== SANITASI XSS (slide fragments dari AI) =====\n// Diterapkan per-chunk, bukan ke template luar yang punya script sah.\nfunction sanitizeHtml(html) {\n    html = html.replace(/<script\\b[^<]*(?:(?!<\\/script>)<[^<]*)*<\\/script>/gi, \"<!-- script removed -->\");\n    html = html.replace(/\\s+on\\w+\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s>]+)/gi, \"\");\n    html = html.replace(/(href|src|action)\\s*=\\s*[\"']?\\s*javascript:/gi, '$1=\"#\" data-blocked=');\n    html = html.replace(/<(iframe|object|embed|form)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, \"<!-- blocked -->\");\n    html = html.replace(/<(iframe|object|embed|form)\\b[^>]*\\/?>/gi, \"<!-- blocked -->\");\n    return html;\n}\n\nlet slideCount = 0;\ninputItems.forEach(item => {\n    const rawData = item.json.html_chunks || item.json.data || \"\";\n    const chunks = Array.isArray(rawData) ? rawData : [rawData];\n    chunks.forEach(chunk => {\n        if (!chunk || typeof chunk !== 'string') return;\n        let cleanSlide = chunk\n            .replace(/<!DOCTYPE html>/gi, \"\")\n            .replace(/<html[^>]*>/gi, \"\")\n            .replace(/<\\/html>/gi, \"\")\n            .replace(/<head[\\s\\S]*?<\\/head>/gi, \"\")\n            .replace(/<body[^>]*>/gi, \"\")\n            .replace(/<\\/body>/gi, \"\")\n            .trim();\n        \n        // LCP Optimization (Bab 6.A arsitektur-workflow-html.md):\n        // Slide 1 (Cover): eager loading & high priority. Slide 2+: lazy loading.\n        if (slideCount === 0) {\n            cleanSlide = cleanSlide.replace(/<img\\b(?![^>]*\\bloading=)/gi, '<img loading=\"eager\" fetchpriority=\"high\"');\n        } else {\n            cleanSlide = cleanSlide.replace(/<img\\b(?![^>]*\\bloading=)/gi, '<img loading=\"lazy\"');\n        }\n        \n        cleanSlide = sanitizeHtml(balanceDivs(cleanSlide));\n        if (slideCount === 0) {\n            cleanSlide = cleanSlide.replace(\n                /class=(['\"])([^'\"]*\\bslide-container\\b[^'\"]*)\\1/i,\n                function (full, quote, classes) {\n                    return /(?:^|\\s)active(?:\\s|$)/.test(classes)\n                        ? full\n                        : 'class=' + quote + classes.trim() + ' active' + quote;\n                }\n            );\n        }\n        combinedSlides += cleanSlide + \"\\n\";\n        slideCount++;\n    });\n});\n\nif (!combinedSlides.includes('slide-container')) {\n    combinedSlides = '<div class=\"slide-container active\" data-layout=\"error\" style=\"display:flex;background:#060A12;color:#fff;font-family:Inter,sans-serif;align-items:center;justify-content:center;padding:64px;text-align:center\"><div><h1 style=\"font-size:34px;margin:0 0 14px\">Slide belum diterima</h1><p style=\"font-size:18px;opacity:.75;margin:0\">Periksa output Slide Designer, Sanitize HTML, dan Aggregate.</p></div></div>';\n    slideCount = 1;\n}\n\nconst finalHtml = `\n<!DOCTYPE html>\n<html lang=\"id\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">\n    <meta name=\"robots\" content=\"noindex, nofollow\">\n    <title>Sleyd AI Presentation</title>\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n    <link href=\"https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">\n    <script src=\"https://cdn.tailwindcss.com\"></script>\n    <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js\"></script>\n    <script src=\"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js\"></script>\n    <script src=\"https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js\"></script>\n    <script src=\"https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgenjs.bundle.js\"></script>\n    <script src=\"https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js\"></script>\n    <script type=\"module\">\n        import { animate, stagger } from \"https://cdn.jsdelivr.net/npm/motion@11/+esm\";\n        window.Motion = { animate, stagger };\n    </script>\n    <style>\n        \n        /* ===== VIEW TRANSITIONS API (Bab 4.B arsitektur-workflow-html.md) ===== */\n        @view-transition {\n            navigation: auto;\n        }\n\n        /* ===== ACCESSIBILITY PREFERS-REDUCED-MOTION (Bab 4.C) ===== */\n        @media (prefers-reduced-motion: reduce) {\n            *, ::before, ::after {\n                animation-delay: -1ms !important;\n                animation-duration: 1ms !important;\n                animation-iteration-count: 1 !important;\n                background-attachment: scroll !important;\n                scroll-behavior: auto !important;\n                transition-duration: 0s !important;\n                transition-delay: 0s !important;\n            }\n            @view-transition {\n                navigation: none !important;\n            }\n        }\n\n        /* ===== BLACK SCREEN & OVERVIEW OVERLAYS (Bab 5.A) ===== */\n        #blackout-overlay {\n            position: fixed; inset: 0; background: #000000; z-index: 99999;\n            display: none; cursor: pointer;\n        }\n        #blackout-overlay.active { display: block; }\n        \n        html, body { margin: 0; padding: 0; overflow: hidden; background-color: #060A12; font-family: 'Inter', sans-serif; width: 100%; height: 100%; }\n\n        #stage {\n            position: fixed; inset: 0;\n            display: flex; align-items: center; justify-content: center;\n            overflow: hidden;\n        }\n        #presentation-wrapper {\n            width: 1280px; height: 720px;\n            position: relative; flex-shrink: 0;\n            perspective: 1800px;\n        }\n\n        .slide-container {\n            width: 100%; height: 100%;\n            position: absolute; inset: 0;\n            display: none; flex-direction: column;\n            justify-content: center; align-items: center;\n            background-size: cover; background-position: center;\n            backface-visibility: hidden; overflow: hidden;\n        }\n        .slide-container.active { display: flex; }\n\n        /* ===== DECK THEME BASE (token-driven, one identity per deck) ===== */\n        .slide-base {\n            background: var(--bg-grad, var(--bg, #060A12));\n            color: var(--text, #EAF1F5);\n            font-family: var(--font-body, 'Inter'), sans-serif;\n        }\n\n        /* ===== DECORATIVE BACKGROUND LAYERS (html2canvas-safe) ===== */\n        .slide-container[class*=\"deco-\"]::before,\n        .slide-container[class*=\"deco-\"]::after {\n            content: \"\"; position: absolute; inset: 0;\n            pointer-events: none; z-index: 0;\n        }\n        .deco-mesh::before {\n            background:\n                radial-gradient(55% 55% at 12% 8%, rgba(var(--accent-rgb,52,211,153),0.20), transparent 70%),\n                radial-gradient(48% 52% at 88% 18%, rgba(var(--accent2-rgb,56,189,248),0.14), transparent 72%),\n                radial-gradient(60% 60% at 82% 94%, rgba(var(--accent-rgb,52,211,153),0.10), transparent 75%);\n        }\n        .deco-aurora::before {\n            background: radial-gradient(42% 52% at 22% 28%, rgba(var(--accent-rgb,52,211,153),0.28), transparent 70%);\n            animation: decoFloat 13s ease-in-out infinite;\n        }\n        .deco-aurora::after {\n            background: radial-gradient(46% 56% at 80% 74%, rgba(var(--accent2-rgb,56,189,248),0.22), transparent 72%);\n            animation: decoFloat 17s ease-in-out infinite reverse;\n        }\n        .deco-glow::after {\n            background: radial-gradient(40% 44% at 80% 14%, rgba(var(--accent-rgb,52,211,153),0.24), transparent 70%);\n            animation: decoPulse 9s ease-in-out infinite;\n        }\n        .deco-grid::before {\n            background-image:\n                linear-gradient(rgba(var(--ink-rgb,148,163,184),0.07) 1px, transparent 1px),\n                linear-gradient(90deg, rgba(var(--ink-rgb,148,163,184),0.07) 1px, transparent 1px);\n            background-size: 46px 46px;\n            -webkit-mask-image: radial-gradient(circle at 50% 42%, #000 52%, transparent 100%);\n                    mask-image: radial-gradient(circle at 50% 42%, #000 52%, transparent 100%);\n        }\n        .deco-dots::before {\n            background-image: radial-gradient(rgba(var(--ink-rgb,120,110,100),0.12) 1.4px, transparent 1.6px);\n            background-size: 26px 26px;\n            -webkit-mask-image: radial-gradient(circle at 50% 42%, #000 58%, transparent 100%);\n                    mask-image: radial-gradient(circle at 50% 42%, #000 58%, transparent 100%);\n        }\n        .deco-blueprint::before {\n            background-image:\n                linear-gradient(rgba(var(--accent-rgb,45,212,191),0.09) 1px, transparent 1px),\n                linear-gradient(90deg, rgba(var(--accent-rgb,45,212,191),0.09) 1px, transparent 1px);\n            background-size: 34px 34px;\n            -webkit-mask-image: linear-gradient(115deg, #000 40%, transparent 92%);\n                    mask-image: linear-gradient(115deg, #000 40%, transparent 92%);\n        }\n        @keyframes decoFloat { 0%{transform:translate3d(0,0,0);} 50%{transform:translate3d(0,-16px,0);} 100%{transform:translate3d(0,0,0);} }\n        @keyframes decoPulse { 0%,100%{opacity:0.75;} 50%{opacity:1;} }\n\n        /* ===== COMPONENT PRIMITIVES (compose premium slides consistently) ===== */\n        .card {\n            background: var(--surface, rgba(255,255,255,0.05));\n            border: 1px solid var(--border, rgba(255,255,255,0.12));\n            border-radius: 22px;\n            box-shadow: 0 22px 48px -30px rgba(0,0,0,0.55);\n        }\n        .hairline { height: 1px; border: 0; background: linear-gradient(90deg, transparent, var(--border, rgba(255,255,255,0.28)), transparent); }\n        .accent-line { display: inline-block; height: 3px; border-radius: 999px; background: var(--accent, #34D399); }\n        .kpi-number { font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 0.92; }\n        .chart-wrapper { min-width: 0; }\n        .chart-wrapper canvas { width: 100% !important; height: 100% !important; }\n        .chart-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; color: var(--text-soft); border: 1px dashed var(--border); border-radius: 18px; font-size: 15px; }\n        .chip {\n            display: inline-flex; align-items: center; align-self: flex-start; width: fit-content; gap: 7px;\n            padding: 6px 14px; border-radius: 999px;\n            background: var(--accent-soft, rgba(var(--accent-rgb,52,211,153),0.12));\n            border: 1px solid var(--border, rgba(255,255,255,0.14));\n            color: var(--text-soft, rgba(234,241,245,0.75));\n            font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;\n        }\n        .icon { width: 24px; height: 24px; stroke: var(--accent, #34D399); stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; flex: none; }\n        .divider-shimmer {\n            position: relative; overflow: hidden;\n            background: var(--border, rgba(255,255,255,0.14));\n        }\n        .divider-shimmer::after {\n            content: \"\"; position: absolute; inset: 0;\n            background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb,52,211,153),0.85), transparent);\n            background-size: 220% 100%;\n            animation: accentShimmer 3.6s linear infinite;\n        }\n        @keyframes accentShimmer { 0%{background-position:-160% 0;} 100%{background-position:260% 0;} }\n\n        /* ===== ENTRANCE ANIMATIONS (contract with Slide Designer output) ===== */\n        @keyframes fadeUp { from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);} }\n        .animate-fade-up { animation: fadeUp 0.8s ease-out forwards; opacity:0; }\n        @keyframes heroReveal { from{opacity:0;transform:scale(0.92);filter:blur(6px);}to{opacity:1;transform:scale(1);filter:blur(0);} }\n        .animate-hero-reveal { animation: heroReveal 1s cubic-bezier(0.16,1,0.3,1) forwards; opacity:0; }\n        @keyframes splitLeft { from{opacity:0;transform:translateX(-40px);}to{opacity:1;transform:translateX(0);} }\n        @keyframes splitRight { from{opacity:0;transform:translateX(40px);}to{opacity:1;transform:translateX(0);} }\n        .animate-split-left { animation: splitLeft 0.9s ease-out forwards; opacity:0; }\n        .animate-split-right { animation: splitRight 0.9s ease-out forwards; opacity:0; }\n        @keyframes cardPop { from{opacity:0;transform:translateY(20px) scale(0.96);}to{opacity:1;transform:translateY(0) scale(1);} }\n        .animate-cards-stagger { animation: cardPop 0.6s ease-out forwards; opacity:0; }\n        .animate-cards-stagger:nth-child(1){animation-delay:.1s;}\n        .animate-cards-stagger:nth-child(2){animation-delay:.25s;}\n        .animate-cards-stagger:nth-child(3){animation-delay:.4s;}\n        .animate-cards-stagger:nth-child(4){animation-delay:.55s;}\n        .animate-cards-stagger:nth-child(5){animation-delay:.7s;}\n        .animate-cards-stagger:nth-child(6){animation-delay:.85s;}\n        @keyframes stepIn { from{opacity:0;transform:translateX(-16px);}to{opacity:1;transform:translateX(0);} }\n        .animate-step-flow { animation: stepIn 0.5s ease-out forwards; opacity:0; }\n        .animate-step-flow:nth-child(1){animation-delay:.15s;}\n        .animate-step-flow:nth-child(2){animation-delay:.35s;}\n        .animate-step-flow:nth-child(3){animation-delay:.55s;}\n        .animate-step-flow:nth-child(4){animation-delay:.75s;}\n        .animate-step-flow:nth-child(5){animation-delay:.95s;}\n        .animate-timeline-draw { stroke-dasharray:1000; stroke-dashoffset:1000; animation: timelineDraw 2s ease-out forwards; }\n        @keyframes timelineDraw { to{ stroke-dashoffset:0; } }\n\n        /* ===== NEW MEANINGFUL MOTION ===== */\n        @keyframes lineReveal { from{ clip-path: inset(0 100% 0 0); } to{ clip-path: inset(0 0 0 0); } }\n        .animate-line-reveal { animation: lineReveal 0.9s cubic-bezier(0.22,1,0.36,1) forwards; }\n        @keyframes wordUp { from{opacity:0;transform:translateY(0.5em);}to{opacity:1;transform:translateY(0);} }\n        .animate-word-reveal > * { display:inline-block; opacity:0; animation: wordUp 0.6s cubic-bezier(0.22,1,0.36,1) forwards; }\n        .animate-word-reveal > *:nth-child(1){animation-delay:.06s;}\n        .animate-word-reveal > *:nth-child(2){animation-delay:.14s;}\n        .animate-word-reveal > *:nth-child(3){animation-delay:.22s;}\n        .animate-word-reveal > *:nth-child(4){animation-delay:.30s;}\n        .animate-word-reveal > *:nth-child(5){animation-delay:.38s;}\n        .animate-word-reveal > *:nth-child(6){animation-delay:.46s;}\n        .animate-word-reveal > *:nth-child(7){animation-delay:.54s;}\n        .animate-word-reveal > *:nth-child(8){animation-delay:.62s;}\n        @keyframes drawX { from{ transform: scaleX(0); } to{ transform: scaleX(1); } }\n        .animate-draw-x { transform-origin: left center; animation: drawX 0.7s cubic-bezier(0.22,1,0.36,1) forwards; }\n\n        \n        /* ===== DECO EXTENSIONS — REACTBITS-INSPIRED (CSS-only, html2canvas-safe) ===== */\n        /* deco-hyperspeed: animated diagonal speed-lines */\n        .deco-hyperspeed::before {\n            background:\n                repeating-linear-gradient(75deg,\n                    transparent 0, transparent 18px,\n                    rgba(var(--accent-rgb,56,189,248),0.07) 18px, rgba(var(--accent-rgb,56,189,248),0.07) 19px);\n            background-size: 80px 80px;\n            animation: hyperSweep 1.4s linear infinite;\n        }\n        .deco-hyperspeed::after {\n            background: radial-gradient(ellipse 70% 45% at 50% 50%,\n                rgba(var(--accent-rgb,56,189,248),0.18) 0%, transparent 68%),\n                radial-gradient(ellipse 40% 30% at 80% 90%,\n                rgba(var(--accent2-rgb,167,139,250),0.12) 0%, transparent 60%);\n            animation: decoPulse 5s ease-in-out infinite;\n        }\n        @keyframes hyperSweep { from{background-position:0 0;} to{background-position:-80px 0;} }\n\n        /* deco-shimmer: metallic sweeping highlight */\n        .deco-shimmer::before {\n            background: linear-gradient(\n                105deg,\n                transparent 20%, rgba(var(--accent-rgb,209,213,219),0.07) 38%,\n                rgba(255,255,255,0.12) 50%, rgba(var(--accent-rgb,209,213,219),0.07) 62%,\n                transparent 80%);\n            background-size: 220% 100%;\n            animation: shimmerSlide 3.8s linear infinite;\n        }\n        .deco-shimmer::after {\n            background: radial-gradient(ellipse 90% 30% at 50% 100%,\n                rgba(var(--accent2-rgb,251,191,36),0.14) 0%, transparent 60%),\n                radial-gradient(ellipse 60% 40% at 50% 0%,\n                rgba(var(--accent-rgb,209,213,219),0.10) 0%, transparent 55%);\n        }\n        @keyframes shimmerSlide { from{background-position:-120% 0;} to{background-position:320% 0;} }\n\n        /* deco-wave: animated gradient wave layers */\n        .deco-wave::before {\n            background:\n                radial-gradient(ellipse 80% 50% at 20% 20%, rgba(var(--accent-rgb,96,165,250),0.16), transparent 55%),\n                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(var(--accent2-rgb,251,113,133),0.12), transparent 55%);\n            animation: waveFloat1 9s ease-in-out infinite;\n        }\n        .deco-wave::after {\n            background:\n                radial-gradient(ellipse 70% 50% at 60% 10%, rgba(var(--accent2-rgb,251,113,133),0.10), transparent 55%),\n                radial-gradient(ellipse 80% 60% at 10% 80%, rgba(var(--accent-rgb,96,165,250),0.09), transparent 60%);\n            animation: waveFloat2 13s ease-in-out infinite;\n        }\n        @keyframes waveFloat1 { 0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(4%,-6%) scale(1.06);} }\n        @keyframes waveFloat2 { 0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(-5%,5%) scale(1.04);} }\n\n        /* deco-liquid: organic animated blobs (liquid-ether / ferrofluid inspired) */\n        .deco-liquid::before {\n            background:\n                radial-gradient(circle at 22% 34%, rgba(var(--accent-rgb,6,182,212),0.22), transparent 42%),\n                radial-gradient(circle at 78% 68%, rgba(var(--accent2-rgb,52,211,153),0.18), transparent 42%);\n            filter: blur(28px);\n            animation: liquidBlob1 14s ease-in-out infinite;\n        }\n        .deco-liquid::after {\n            background:\n                radial-gradient(circle at 62% 18%, rgba(var(--accent2-rgb,52,211,153),0.14), transparent 38%),\n                radial-gradient(circle at 28% 80%, rgba(var(--accent-rgb,6,182,212),0.12), transparent 38%);\n            filter: blur(22px);\n            animation: liquidBlob2 18s ease-in-out infinite;\n        }\n        @keyframes liquidBlob1 {\n            0%,100%{transform:scale(1.1) translate(0,0) rotate(0deg);}\n            33%{transform:scale(1.18) translate(5%,-6%) rotate(4deg);}\n            66%{transform:scale(1.0) translate(-4%,5%) rotate(-3deg);}\n        }\n        @keyframes liquidBlob2 {\n            0%,100%{transform:scale(1.05) translate(0,0);}\n            40%{transform:scale(1.14) translate(-6%,6%);}\n            75%{transform:scale(0.96) translate(5%,-4%);}\n        }\n\n        /* deco-rings: concentric pulsing rings (magic-rings inspired) */\n        .slide-container.deco-rings::before {\n            background: transparent;\n            border: 1.5px solid rgba(var(--accent-rgb,196,181,253),0.20);\n            border-radius: 50%;\n            width: 55%; height: 0;\n            padding-bottom: 55%;\n            top: 50%; left: 50%;\n            transform: translate(-50%,-50%);\n            animation: ringExpand 4s cubic-bezier(0,0,0.2,1) infinite;\n        }\n        .deco-rings::after {\n            background: radial-gradient(circle at 50% 50%, rgba(var(--accent-rgb,196,181,253),0.08), transparent 60%);\n            animation: decoPulse 6s ease-in-out infinite;\n        }\n        @keyframes ringExpand {\n            0%{transform:translate(-50%,-50%) scale(0.6);opacity:0.7;}\n            100%{transform:translate(-50%,-50%) scale(1.8);opacity:0;}\n        }\n\n        /* ===== SPECULAR BUTTON (btn-specular class) ===== */\n        .btn-specular { position: relative; overflow: hidden; }\n        .btn-specular::after {\n            content: \"\"; position: absolute; inset: 0;\n            background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.26) 50%, transparent 70%);\n            background-size: 200% 100%; background-position: 150% 0;\n            animation: specularSweep 2.6s ease-in-out infinite;\n        }\n        @keyframes specularSweep { 0%{background-position:150% 0;} 100%{background-position:-50% 0;} }\n\n        /* ===== NEW ENTRANCE ANIMATIONS ===== */\n        /* masked-reveal: headline wipes in from left */\n        @keyframes maskReveal { from{clip-path:inset(0 100% 0 0);} to{clip-path:inset(0 0% 0 0);} }\n        .animate-masked-reveal { clip-path: inset(0 100% 0 0); animation: maskReveal 0.85s cubic-bezier(0.77,0,0.18,1) forwards; }\n        .animate-masked-reveal.delay-1 { animation-delay: 0.18s; }\n        .animate-masked-reveal.delay-2 { animation-delay: 0.36s; }\n\n        /* pixel-swap: blocky pixelated reveal */\n        @keyframes pixelIn {\n            0%{filter:contrast(0) blur(10px);opacity:0;transform:scale(1.03);}\n            60%{filter:contrast(1.08) blur(0);opacity:1;transform:scale(1.0);}\n            100%{filter:none;transform:scale(1);}\n        }\n        .animate-pixel-swap { animation: pixelIn 0.65s steps(10) forwards; opacity:0; }\n        .animate-pixel-swap:nth-child(1){animation-delay:0s;}\n        .animate-pixel-swap:nth-child(2){animation-delay:0.10s;}\n        .animate-pixel-swap:nth-child(3){animation-delay:0.20s;}\n        .animate-pixel-swap:nth-child(4){animation-delay:0.30s;}\n\n        /* antigravity: elements float up independently (staggered) */\n        @keyframes antigravityFloat {\n            0%{opacity:0;transform:translateY(28px) scale(0.94);}\n            100%{opacity:1;transform:translateY(0) scale(1);}\n        }\n        .animate-antigravity > * { opacity:0; animation: antigravityFloat 0.75s cubic-bezier(0.22,1,0.36,1) forwards; }\n        .animate-antigravity > *:nth-child(1){animation-delay:0.04s;}\n        .animate-antigravity > *:nth-child(2){animation-delay:0.16s;}\n        .animate-antigravity > *:nth-child(3){animation-delay:0.28s;}\n        .animate-antigravity > *:nth-child(4){animation-delay:0.40s;}\n        .animate-antigravity > *:nth-child(5){animation-delay:0.52s;}\n        .animate-antigravity > *:nth-child(6){animation-delay:0.64s;}\n\n.hover-card { transition: transform 0.3s ease, box-shadow 0.3s ease, filter 0.3s ease; cursor: default; }\n        .hover-card:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 26px 50px -22px rgba(0,0,0,0.55); filter: brightness(1.06); }\n\n        /* ===== SLIDE TRANSITIONS (per layout) ===== */\n        .slide-container.trans-fade.entering { animation: fadeIn 0.5s ease forwards; }\n        @keyframes fadeIn { from{opacity:0;}to{opacity:1;} }\n        .slide-container.trans-horizontal.entering-next { animation: slideInRight 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }\n        .slide-container.trans-horizontal.entering-prev { animation: slideInLeft 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }\n        @keyframes slideInRight { from{opacity:0;transform:translateX(60px);}to{opacity:1;transform:translateX(0);} }\n        @keyframes slideInLeft { from{opacity:0;transform:translateX(-60px);}to{opacity:1;transform:translateX(0);} }\n        .slide-container.trans-scale.entering { animation: scaleZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }\n        @keyframes scaleZoomIn { from{opacity:0;transform:scale(0.85);}to{opacity:1;transform:scale(1);} }\n        .slide-container.trans-cube.entering-next { animation: cubeFlipNext 0.7s cubic-bezier(0.6,0.04,0.98,0.34) forwards; transform-origin: left center; }\n        .slide-container.trans-cube.entering-prev { animation: cubeFlipPrev 0.7s cubic-bezier(0.6,0.04,0.98,0.34) forwards; transform-origin: right center; }\n        @keyframes cubeFlipNext { from{opacity:0;transform:rotateY(90deg);}to{opacity:1;transform:rotateY(0deg);} }\n        @keyframes cubeFlipPrev { from{opacity:0;transform:rotateY(-90deg);}to{opacity:1;transform:rotateY(0deg);} }\n\n        #progress-bar-track { position:fixed; bottom:0; left:0; width:100%; height:4px; background:rgba(255,255,255,0.08); z-index:9999; }\n        #progress-bar-fill { height:100%; width:0%; background:linear-gradient(90deg, var(--accent, #a5b4fc), #ffffff); transition: width 0.4s cubic-bezier(0.65,0,0.35,1); }\n\n        #dot-indicator { position:fixed; right:20px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px; z-index:9999; }\n        .dot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,0.3); cursor:pointer; transition: all 0.3s ease; }\n        .dot:hover { background:rgba(255,255,255,0.7); transform:scale(1.2); }\n        .dot.active-dot { background:#ffffff; transform:scale(1.35); box-shadow:0 0 8px rgba(255,255,255,0.6); }\n\n        .editable-text.editing-active { outline: 2px dashed rgba(255,255,255,0.5); outline-offset: 4px; cursor: text; }\n\n        #export-panel {\n            position: fixed; bottom: 24px; left: 50%;\n            transform: translateX(-50%) translateY(10px);\n            z-index: 9999; display: flex; gap: 10px;\n            opacity: 0; pointer-events: none;\n            transition: opacity .35s ease, transform .35s ease;\n        }\n        #export-panel.visible { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }\n        .export-btn {\n            display: flex; align-items: center; gap: 7px;\n            padding: 11px 20px; border-radius: 999px; border: none; cursor: pointer;\n            font-size: 13px; font-weight: 600; font-family: inherit;\n            background: rgba(255,255,255,0.95); color: #0f172a;\n            box-shadow: 0 10px 28px -8px rgba(0,0,0,0.45);\n            transition: transform .2s ease, box-shadow .2s ease;\n        }\n        .export-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -8px rgba(0,0,0,0.55); }\n        .export-btn:disabled { opacity: .6; cursor: progress; transform: none; }\n        .export-btn svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }\n\n        /* ===== EXPORT CAPTURE: freeze motion to final frame for crisp images ===== */\n        body.exporting .slide-container[class*=\"deco-\"]::before,\n        body.exporting .slide-container[class*=\"deco-\"]::after,\n        body.exporting .divider-shimmer::after { animation: none !important; }\n        body.exporting .animate-fade-up, body.exporting .animate-hero-reveal,\n        body.exporting .animate-split-left, body.exporting .animate-split-right,\n        body.exporting .animate-cards-stagger, body.exporting .animate-step-flow,\n        body.exporting .animate-timeline-draw, body.exporting .animate-line-reveal,\n        body.exporting .animate-word-reveal > *, body.exporting .animate-draw-x {\n            animation: none !important; opacity: 1 !important;\n            transform: none !important; clip-path: none !important;\n            filter: none !important; stroke-dashoffset: 0 !important;\n        }\n\n        @media (prefers-reduced-motion: reduce) {\n            .animate-fade-up,.animate-hero-reveal,.animate-split-left,.animate-split-right,\n            .animate-cards-stagger,.animate-step-flow,.animate-timeline-draw,\n            .animate-line-reveal,.animate-draw-x,.animate-word-reveal > * {\n                animation: none !important; opacity: 1 !important;\n                transform: none !important; clip-path: none !important; stroke-dashoffset: 0 !important;\n            }\n            .deco-aurora::before,.deco-aurora::after,.deco-glow::after,.divider-shimmer::after { animation: none !important; }\n            .slide-container.trans-fade.entering,\n            .slide-container.trans-horizontal.entering-next,\n            .slide-container.trans-horizontal.entering-prev,\n            .slide-container.trans-scale.entering,\n            .slide-container.trans-cube.entering-next,\n            .slide-container.trans-cube.entering-prev {\n                animation: none !important; opacity: 1 !important; transform: none !important;\n            }\n        }\n\n        @media (max-width: 480px) {\n            #export-panel { bottom: 14px; gap: 6px; }\n            .export-btn { padding: 8px 12px; font-size: 11px; }\n        }\n    </style>\n</head>\n<body>\n    <div id=\"blackout-overlay\" title=\"Klik atau tekan B / Escape untuk kembali\"></div>\n    <div id=\"stage\">\n        <div id=\"presentation-wrapper\">\n            ${combinedSlides}\n        </div>\n    </div>\n    <div id=\"progress-bar-track\"><div id=\"progress-bar-fill\"></div></div>\n    <div id=\"dot-indicator\"></div>\n    <div id=\"export-panel\">\n        <button class=\"export-btn\" id=\"export-pdf-btn\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12m0 0l-4-4m4 4l4-4M5 21h14\"/></svg> PDF</button>\n        <button class=\"export-btn\" id=\"export-ppt-btn\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12m0 0l-4-4m4 4l4-4M5 21h14\"/></svg> PPT</button>\n        <button class=\"export-btn\" id=\"export-html-btn\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12m0 0l-4-4m4 4l4-4M5 21h14\"/></svg> HTML</button>\n    </div>\n    <script>\n        document.addEventListener(\"DOMContentLoaded\", function () {\n\n            // ===== SCALE-TO-FIT =====\n            const stageWrapper = document.getElementById('presentation-wrapper');\n            function fitStage() {\n                const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);\n                stageWrapper.style.zoom = scale;\n            }\n            fitStage();\n            window.addEventListener('resize', function () { fitStage(); refitCurrent(); });\n            window.addEventListener('orientationchange', function () { fitStage(); refitCurrent(); });\n\n            const slides = Array.from(document.querySelectorAll(\".slide-container\"));\n            const total  = slides.length;\n            let current  = 0;\n\n            const transitionMap = {\n                \"hairline-timeline\": \"horizontal\", \"step-by-step-path\": \"horizontal\", \"ab-split-matrix\": \"horizontal\",\n                \"big-stat-callout\": \"scale\", \"sparkline-candlestick\": \"scale\", \"target-persona-avatar\": \"scale\",\n                \"full-bleed-media-split\": \"cube\", \"hero-video-loop\": \"cube\", \"blueprint-overlay\": \"cube\"\n            };\n            function getTransitionType(slideEl) {\n                return transitionMap[slideEl.dataset.layout || \"\"] || \"fade\";\n            }\n\n            const progressFill = document.getElementById(\"progress-bar-fill\");\n            function updateProgress(index) {\n                progressFill.style.width = (total > 1 ? ((index + 1) / total) * 100 : 100) + \"%\";\n            }\n\n            const dotContainer = document.getElementById(\"dot-indicator\");\n            slides.forEach((_, i) => {\n                const dot = document.createElement(\"div\");\n                dot.className = \"dot\";\n                dot.addEventListener(\"click\", () => {\n                    if (i === current) return;\n                    const dir = i > current ? \"next\" : \"prev\";\n                    current = i;\n                    showSlide(current, dir);\n                });\n                dotContainer.appendChild(dot);\n            });\n            function updateDots(index) {\n                Array.from(dotContainer.children).forEach((d, i) => d.classList.toggle(\"active-dot\", i === index));\n            }\n\n            // ===== COUNTER ANIMASI =====\n            function formatCounterValue(el, value) {\n                const targetText = String(el.dataset.target || '0');\n                const inferredDecimals = targetText.includes('.') ? Math.min(2, targetText.split('.')[1].length) : 0;\n                const decimals = Math.max(0, Math.min(4, Number(el.dataset.decimals != null ? el.dataset.decimals : inferredDecimals) || 0));\n                const prefix = String(el.dataset.prefix || '');\n                const suffix = String(el.dataset.suffix || '');\n                return prefix + Number(value).toLocaleString('id-ID', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + suffix;\n            }\n\n            function runCounters(slideEl) {\n                slideEl.querySelectorAll('.counter-value').forEach(el => {\n                    const target = parseFloat(el.dataset.target || '0');\n                    if (!Number.isFinite(target)) return;\n                    if (typeof anime !== 'undefined') {\n                        const obj = { value: 0 };\n                        anime({ targets: obj, value: target, duration: 1200, easing: 'easeOutCubic',\n                            update: function () { el.textContent = formatCounterValue(el, obj.value); } });\n                    } else {\n                        const duration = 1200, startTime = performance.now();\n                        function tick(now) {\n                            const progress = Math.min((now - startTime) / duration, 1);\n                            const eased = 1 - Math.pow(1 - progress, 3);\n                            el.textContent = formatCounterValue(el, target * eased);\n                            if (progress < 1) requestAnimationFrame(tick);\n                        }\n                        requestAnimationFrame(tick);\n                    }\n                });\n            }\n\n            function setCountersFinal(slideEl) {\n                slideEl.querySelectorAll('.counter-value').forEach(el => {\n                    const target = parseFloat(el.dataset.target || '0');\n                    if (Number.isFinite(target)) el.textContent = formatCounterValue(el, target);\n                });\n            }\n\n            // ===== ENTRANCE MOTION =====\n            function runEntranceMotion(slideEl) {\n                if (typeof window.Motion === \"undefined\" || !window.Motion.animate) return;\n                const { animate, stagger } = window.Motion;\n                [\".animate-cards-stagger\", \".animate-step-flow\"].forEach(selector => {\n                    const els = Array.from(slideEl.querySelectorAll(selector));\n                    if (els.length === 0) return;\n                    els.forEach(el => { el.style.animation = \"none\"; el.style.opacity = \"0\"; });\n                    animate(els, { opacity: [0, 1], y: [20, 0] }, { duration: 0.6, delay: stagger(0.15), easing: \"ease-out\" });\n                });\n            }\n\n            // ===== AUTO-FIT: cegah konten terpotong dari bingkai 1280x720 =====\n            // Menskalakan wrapper konten utama bila melebihi area aman. Deterministik,\n            // tidak bergantung pada ketaatan model terhadap batas panjang teks.\n            function fitSlide(slideEl) {\n                let el = slideEl.querySelector('.slide-fit');\n                if (!el) {\n                    // fallback: anak elemen pertama yang bukan absolut (bukan watermark/deco)\n                    const kids = Array.from(slideEl.children);\n                    el = kids.find(function (k) { const p = getComputedStyle(k).position; return p !== 'absolute' && p !== 'fixed'; }) || kids[0];\n                }\n                if (!el) return;\n                el.style.transformOrigin = 'top center';\n                el.style.transform = 'none';\n                const availH = el.clientHeight, availW = el.clientWidth;\n                if (!availH || !availW) return;\n                const needH = Math.max(el.scrollHeight, el.offsetHeight);\n                const needW = Math.max(el.scrollWidth, el.offsetWidth);\n                let s = Math.min(availH / needH, availW / needW);\n                if (s < 0.995) {\n                    s = Math.max(s, 0.25);\n                    el.style.transform = 'scale(' + s + ')';\n                }\n            }\n            function refitCurrent() { if (slides[current]) fitSlide(slides[current]); }\n\n            // ===== THEME-AWARE CHART.JS =====\n            const chartInstances = {};\n            function parseColor(str) {\n                str = (str || \"\").trim();\n                if (!str) return [52, 211, 153];\n                if (str.charAt(0) === \"#\") {\n                    let h = str.slice(1);\n                    if (h.length === 3) h = h.charAt(0)+h.charAt(0)+h.charAt(1)+h.charAt(1)+h.charAt(2)+h.charAt(2);\n                    const n = parseInt(h, 16);\n                    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];\n                }\n                const m = str.match(/(\\d+)[,\\s]+(\\d+)[,\\s]+(\\d+)/);\n                if (m) return [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];\n                return [52, 211, 153];\n            }\n            function rgba(rgb, a) { return \"rgba(\" + rgb[0] + \",\" + rgb[1] + \",\" + rgb[2] + \",\" + a + \")\"; }\n            function readTheme(slideEl) {\n                const cs = slideEl ? getComputedStyle(slideEl) : getComputedStyle(document.documentElement);\n                const accentRaw = (cs.getPropertyValue(\"--accent\") || \"#34D399\").trim();\n                const textRaw   = (cs.getPropertyValue(\"--text\") || \"#EAF1F5\").trim();\n                const bgRaw     = (cs.getPropertyValue(\"--bg\") || \"#0f172a\").trim();\n                const chartRaw  = (cs.getPropertyValue(\"--chart-colors\") || \"\").trim();\n                let palette = chartRaw ? chartRaw.split(\",\").map(s => s.trim()).filter(Boolean) : [];\n                if (!palette.length) palette = [accentRaw];\n                const textRgb = parseColor(textRaw);\n                return {\n                    palette: palette,\n                    paletteRgb: palette.map(parseColor),\n                    accentRgb: parseColor(accentRaw),\n                    bg: bgRaw,\n                    text: rgba(textRgb, 0.92),\n                    textSoft: rgba(textRgb, 0.62),\n                    grid: rgba(textRgb, 0.10),\n                    tooltipBg: rgba(parseColor(bgRaw), 0.92)\n                };\n            }\n            function colorAt(theme, i) {\n                const rgb = theme.paletteRgb[i % theme.paletteRgb.length];\n                return rgba(rgb, 0.85);\n            }\n            function buildChart(canvasEl, animate) {\n                if (typeof Chart === 'undefined') return null;\n                let config;\n                try { config = JSON.parse(canvasEl.dataset.chartConfig || '{}'); }\n                catch (e) { showChartFallback(canvasEl, 'Data grafik tidak dapat dibaca'); return null; }\n\n                const labels = Array.isArray(config.labels) ? config.labels.map(v => String(v == null ? '' : v)) : [];\n                const rawSeries = Array.isArray(config.series) ? config.series : [];\n                const series = rawSeries.map((s, i) => ({\n                    name: String((s && s.name) || ('Seri ' + (i + 1))),\n                    values: (Array.isArray(s && s.values) ? s.values : (Array.isArray(s && s.data) ? s.data : [])).map(v => {\n                        const n = typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, ''));\n                        return Number.isFinite(n) ? n : null;\n                    })\n                })).filter(s => s.values.length === labels.length && s.values.some(Number.isFinite));\n                if (labels.length < 2 || !series.length) { showChartFallback(canvasEl, 'Data grafik belum lengkap'); return null; }\n\n                let type = String(config.type || 'bar').toLowerCase();\n                if (type === 'donut') type = 'doughnut';\n                if (type === 'area') type = 'line';\n                if (!['bar','line','pie','doughnut','radar'].includes(type)) type = 'bar';\n                const isPie = type === 'pie' || type === 'doughnut';\n                if (isPie && series.length > 1) series.splice(1);\n\n                const slideEl = canvasEl.closest('.slide-container');\n                const theme = readTheme(slideEl);\n                const ctx = canvasEl.getContext('2d');\n                const prefix = String(config.prefix || '');\n                const suffix = String(config.suffix || '');\n                const unit = String(config.unit || '');\n                const indexAxis = type === 'bar' && config.indexAxis === 'y' ? 'y' : 'x';\n                const horizontal = indexAxis === 'y';\n                const maxAbs = Math.max(0, ...series.flatMap(s => s.values.filter(Number.isFinite).map(Math.abs)));\n\n                function formatNumber(value, compact) {\n                    if (!Number.isFinite(Number(value))) return '';\n                    const number = Number(value);\n                    const options = compact && Math.abs(number) >= 10000\n                        ? { notation: 'compact', maximumFractionDigits: 1 }\n                        : { maximumFractionDigits: Number.isInteger(number) ? 0 : 2 };\n                    const formatted = new Intl.NumberFormat('id-ID', options).format(number);\n                    return (prefix ? prefix + ' ' : '') + formatted + (suffix || (unit ? ' ' + unit : ''));\n                }\n\n                function showPercent(context) {\n                    const values = context.dataset.data.filter(Number.isFinite);\n                    const total = values.reduce((sum, value) => sum + value, 0);\n                    const value = Number(context.raw);\n                    const pct = total > 0 ? ' (' + ((value / total) * 100).toFixed(1).replace('.0','') + '%)' : '';\n                    return context.label + ': ' + formatNumber(value, false) + pct;\n                }\n\n                canvasEl.setAttribute('aria-label', canvasEl.getAttribute('aria-label') || (config.title ? 'Grafik ' + config.title : 'Grafik data'));\n                const datasets = series.map((s, i) => {\n                    const baseRgb = theme.paletteRgb[i % theme.paletteRgb.length];\n                    let background;\n                    if (isPie) {\n                        background = labels.map((_, j) => colorAt(theme, j));\n                    } else if (type === 'line') {\n                        const gradient = ctx.createLinearGradient(0, 0, 0, 320);\n                        gradient.addColorStop(0, rgba(baseRgb, 0.30));\n                        gradient.addColorStop(1, rgba(baseRgb, 0.01));\n                        background = gradient;\n                    } else if (type === 'radar') {\n                        background = rgba(baseRgb, 0.16);\n                    } else {\n                        background = rgba(baseRgb, 0.82);\n                    }\n                    return {\n                        label: s.name,\n                        data: s.values,\n                        backgroundColor: background,\n                        borderColor: (type === 'line' || type === 'radar') ? rgba(baseRgb, 1) : (isPie ? theme.bg : 'transparent'),\n                        borderWidth: isPie ? 2 : ((type === 'line' || type === 'radar') ? 3 : 0),\n                        borderRadius: type === 'bar' ? 8 : 0,\n                        maxBarThickness: horizontal ? 34 : 48,\n                        tension: type === 'line' ? 0.34 : 0,\n                        fill: type === 'line' || type === 'radar',\n                        pointRadius: type === 'line' ? 4 : (type === 'radar' ? 3 : 0),\n                        pointHoverRadius: 6,\n                        pointBackgroundColor: rgba(baseRgb, 1),\n                        pointBorderColor: theme.bg,\n                        pointBorderWidth: 2\n                    };\n                });\n\n                const categoryTicks = {\n                    color: theme.textSoft,\n                    font: { size: 12, family: \"'Inter', sans-serif\" },\n                    callback: function (value) {\n                        const label = this.getLabelForValue(value);\n                        return label.length > 22 ? label.slice(0, 21) + '…' : label;\n                    }\n                };\n                const valueTicks = {\n                    color: theme.textSoft,\n                    font: { size: 11, family: \"'Inter', sans-serif\" },\n                    callback: value => formatNumber(value, maxAbs >= 10000)\n                };\n                const cartesianScales = horizontal ? {\n                    x: { beginAtZero: true, grid: { color: theme.grid }, ticks: valueTicks },\n                    y: { grid: { display: false }, ticks: categoryTicks }\n                } : {\n                    x: { grid: { display: false }, ticks: categoryTicks },\n                    y: { beginAtZero: type === 'bar', grid: { color: theme.grid }, ticks: valueTicks }\n                };\n\n                try {\n                    return new Chart(ctx, {\n                        type,\n                        data: { labels, datasets },\n                        options: {\n                            responsive: true,\n                            maintainAspectRatio: false,\n                            devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),\n                            indexAxis,\n                            cutout: type === 'doughnut' ? '64%' : undefined,\n                            animation: animate ? { duration: 950, easing: 'easeOutQuart' } : false,\n                            interaction: { mode: isPie ? 'nearest' : 'index', intersect: false },\n                            layout: { padding: { top: 8, right: 10, bottom: 4, left: 6 } },\n                            plugins: {\n                                legend: {\n                                    display: series.length > 1 || isPie,\n                                    position: 'bottom',\n                                    labels: { color: theme.text, font: { size: 12, family: \"'Inter', sans-serif\" }, usePointStyle: true, pointStyle: 'circle', padding: 18, boxWidth: 9, boxHeight: 9 }\n                                },\n                                tooltip: {\n                                    backgroundColor: theme.tooltipBg,\n                                    titleColor: theme.text,\n                                    bodyColor: theme.text,\n                                    padding: 12,\n                                    cornerRadius: 10,\n                                    displayColors: !isPie && series.length > 1,\n                                    callbacks: { label: context => isPie ? showPercent(context) : context.dataset.label + ': ' + formatNumber(Number(context.raw), false) }\n                                }\n                            },\n                            scales: isPie ? {} : (type === 'radar' ? {\n                                r: {\n                                    beginAtZero: true,\n                                    angleLines: { color: theme.grid },\n                                    grid: { color: theme.grid },\n                                    pointLabels: { color: theme.textSoft, font: { size: 12 } },\n                                    ticks: { display: false, backdropColor: 'transparent' }\n                                }\n                            } : cartesianScales)\n                        }\n                    });\n                } catch (e) {\n                    console.error('Gagal render chart:', canvasEl.id, e);\n                    showChartFallback(canvasEl, 'Grafik gagal dirender');\n                    return null;\n                }\n            }\n\n            function showChartFallback(canvasEl, message) {\n                const wrapper = canvasEl.parentElement || canvasEl;\n                let fallback = wrapper.querySelector('.chart-empty');\n                if (!fallback) {\n                    fallback = document.createElement('div');\n                    fallback.className = 'chart-empty';\n                    wrapper.appendChild(fallback);\n                }\n                fallback.textContent = message;\n                canvasEl.style.display = 'none';\n            }\n            // live path: animated, build once\n            function initChart(canvasEl) {\n                const id = canvasEl.id;\n                if (chartInstances[id]) return;\n                const c = buildChart(canvasEl, true);\n                if (c) chartInstances[id] = c;\n            }\n            // export path: destroy + rebuild WITHOUT animation so the final frame\n            // exists in the canvas buffer before html2canvas reads it.\n            function paintChartStatic(canvasEl) {\n                const id = canvasEl.id;\n                const ex = chartInstances[id] || (window.Chart && Chart.getChart ? Chart.getChart(canvasEl) : null);\n                if (ex) { try { ex.destroy(); } catch (e) {} }\n                const c = buildChart(canvasEl, false);\n                if (c) chartInstances[id] = c;\n            }\n            function initChartsInSlide(slideEl) { slideEl.querySelectorAll('.chart-canvas').forEach(initChart); }\n            function paintChartsStatic(slideEl) { slideEl.querySelectorAll('.chart-canvas').forEach(paintChartStatic); }\n\n            // ===== EXPORT PDF & PPT =====\n            async function captureAllSlides(onProgress) {\n                const originalIndex = current;\n                const images = [];\n                document.body.classList.add('exporting');\n                if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }\n                const captureBg = (getComputedStyle(slides[0]).getPropertyValue('--bg') || '#0f172a').trim() || '#0f172a';\n                for (let i = 0; i < slides.length; i++) {\n                    const slide = slides[i];\n                    const wasActive = slide.classList.contains('active');\n                    slide.classList.add('active');\n                    slide.style.display = 'flex';\n                    slide.classList.remove('trans-fade','trans-horizontal','trans-scale','trans-cube','entering','entering-next','entering-prev');\n                    paintChartsStatic(slide);\n                    setCountersFinal(slide);\n                    if (onProgress) onProgress(i + 1, slides.length);\n                    await new Promise(r => setTimeout(r, 400));\n                    fitSlide(slide);\n                    const canvas = await html2canvas(slide, { scale: 2, useCORS: true, backgroundColor: captureBg,\n                        onclone: function (doc) {\n                            doc.querySelectorAll('canvas.chart-canvas').forEach(function (cc) {\n                                const src = document.getElementById(cc.id);\n                                if (src && src.width) { cc.width = src.width; cc.height = src.height; try { cc.getContext('2d').drawImage(src, 0, 0); } catch (e) {} }\n                            });\n                        }\n                    });\n                    images.push(canvas.toDataURL('image/jpeg', 0.92));\n                    if (!wasActive) { slide.classList.remove('active'); slide.style.display = 'none'; }\n                }\n                document.body.classList.remove('exporting');\n                showSlide(originalIndex);\n                return images;\n            }\n\n            async function downloadPDF() {\n                const btn = document.getElementById('export-pdf-btn');\n                const orig = btn.innerHTML;\n                btn.disabled = true;\n                try {\n                    const images = await captureAllSlides((done, tot) => { btn.textContent = done + '/' + tot; });\n                    const { jsPDF } = window.jspdf;\n                    const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1280, 720] });\n                    images.forEach((img, idx) => {\n                        if (idx > 0) pdf.addPage([1280, 720], 'landscape');\n                        pdf.addImage(img, 'JPEG', 0, 0, 1280, 720);\n                    });\n                    pdf.save('presentation.pdf');\n                    btn.textContent = 'Selesai';\n                } catch (err) { console.error(err); btn.textContent = 'Gagal'; }\n                finally { setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1800); }\n            }\n\n            async function downloadPPT() {\n                const btn = document.getElementById('export-ppt-btn');\n                const orig = btn.innerHTML;\n                btn.disabled = true;\n                try {\n                    const images = await captureAllSlides((done, tot) => { btn.textContent = done + '/' + tot; });\n                    const pptx = new PptxGenJS();\n                    pptx.defineLayout({ name: 'DECKSLIDE_16x9', width: 13.333, height: 7.5 });\n                    pptx.layout = 'DECKSLIDE_16x9';\n                    images.forEach(img => {\n                        const s = pptx.addSlide();\n                        s.addImage({ data: img, x: 0, y: 0, w: 13.333, h: 7.5 });\n                    });\n                    await pptx.writeFile({ fileName: 'presentation.pptx' });\n                    btn.textContent = 'Selesai';\n                } catch (err) { console.error(err); btn.textContent = 'Gagal'; }\n                finally { setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1800); }\n            }\n\n            function downloadHTML() {\n                const html = '<!DOCTYPE html>\\\\n' + document.documentElement.outerHTML;\n                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });\n                const url = URL.createObjectURL(blob);\n                const link = document.createElement('a');\n                link.href = url;\n                link.download = (window.location.hostname.split('.')[0] || 'sleyd-presentation') + '.html';\n                document.body.appendChild(link);\n                link.click();\n                link.remove();\n                setTimeout(function () { URL.revokeObjectURL(url); }, 1000);\n            }\n\n            // ===== SHOW SLIDE =====\n            function executeSlideTransition(index, direction = \"next\") {\n                slides.forEach((s, i) => {\n                    const isActive = i === index;\n                    s.classList.toggle(\"active\", isActive);\n                    s.style.display = isActive ? \"flex\" : \"none\";\n                    s.classList.remove(\"trans-fade\",\"trans-horizontal\",\"trans-scale\",\"trans-cube\",\"entering\",\"entering-next\",\"entering-prev\");\n                });\n                const activeSlide = slides[index];\n                const type = getTransitionType(activeSlide);\n                activeSlide.classList.add(\"trans-\" + type);\n                if (type === \"horizontal\" || type === \"cube\") {\n                    activeSlide.classList.add(direction === \"next\" ? \"entering-next\" : \"entering-prev\");\n                } else {\n                    activeSlide.classList.add(\"entering\");\n                }\n                runCounters(activeSlide);\n                runEntranceMotion(activeSlide);\n                initChartsInSlide(activeSlide);\n                updateProgress(index);\n                updateDots(index);\n                document.getElementById('export-panel').classList.toggle('visible', index === total - 1);\n                // auto-fit setelah layout & chart settle; ulang saat gambar selesai dimuat\n                requestAnimationFrame(function () { fitSlide(activeSlide); });\n                setTimeout(function () { fitSlide(activeSlide); }, 260);\n                activeSlide.querySelectorAll('img').forEach(function (img) {\n                    if (!img.complete) img.addEventListener('load', function () { fitSlide(activeSlide); }, { once: true });\n                });\n            }\n\n            function showSlide(index, direction = \"next\") {\n                if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {\n                    document.startViewTransition(() => {\n                        executeSlideTransition(index, direction);\n                    });\n                } else {\n                    executeSlideTransition(index, direction);\n                }\n            }\n\n            if (total > 0) { showSlide(0); }\n            else { document.body.innerHTML = \"<div style='color:white;text-align:center;padding:50px;'><h1>Error: Tidak Ada Slide</h1></div>\"; }\n\n            // refit ulang setelah font & seluruh aset selesai dimuat (mempengaruhi tinggi konten)\n            if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function () { refitCurrent(); }); }\n            window.addEventListener('load', refitCurrent);\n\n            // ===== KEYBOARD =====\n            document.addEventListener(\"keydown\", e => {\n                if (e.target && (e.target.isContentEditable || ['INPUT','TEXTAREA'].includes(e.target.tagName))) return;\n                if ((e.key === \"ArrowRight\" || e.key === \" \") && current < total - 1) { current++; showSlide(current, \"next\"); }\n                if (e.key === \"ArrowLeft\" && current > 0) { current--; showSlide(current, \"prev\"); }\n                if (e.key === \"Home\") { current = 0; showSlide(current, \"prev\"); }\n                if (e.key === \"End\") { current = total - 1; showSlide(current, \"next\"); }\n                // WCAG 2.2 Extended Keybindings (Bab 5.A arsitektur-workflow-html.md)\n                if (e.key === \"b\" || e.key === \".\") {\n                    const bo = document.getElementById(\"blackout-overlay\");\n                    if (bo) bo.classList.toggle(\"active\");\n                }\n                if (e.key === \"Escape\") {\n                    const bo = document.getElementById(\"blackout-overlay\");\n                    if (bo && bo.classList.contains(\"active\")) bo.classList.remove(\"active\");\n                }\n            });\n\n            const boEl = document.getElementById(\"blackout-overlay\");\n            if (boEl) { boEl.addEventListener(\"click\", () => boEl.classList.remove(\"active\")); }\n\n            // ===== SWIPE =====\n            let touchStartX = 0;\n            document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });\n            document.addEventListener('touchend', e => {\n                const diff = e.changedTouches[0].screenX - touchStartX;\n                if (Math.abs(diff) < 50) return;\n                if (diff < 0 && current < total - 1) { current++; showSlide(current, \"next\"); }\n                if (diff > 0 && current > 0) { current--; showSlide(current, \"prev\"); }\n            }, { passive: true });\n            document.getElementById('export-pdf-btn').addEventListener('click', downloadPDF);\n            document.getElementById('export-ppt-btn').addEventListener('click', downloadPPT);\n            document.getElementById('export-html-btn').addEventListener('click', downloadHTML);\n        });\n    </script>\n<a id=\"__sleyd_badge__\" href=\"https://sleyd.com/\" target=\"_blank\" rel=\"noopener nofollow\">\n    <svg viewBox=\"0 0 100 100\" width=\"13\" height=\"13\" aria-hidden=\"true\"><path d=\"M0 0 H100 V34 L0 58 Z\" fill=\"#FF4A1C\"/><path d=\"M0 66 L100 42 V100 H0 Z\" fill=\"#FF4A1C\"/></svg>\n    <span>Made with <strong>Sleyd</strong></span>\n</a>\n<style>\n    #__sleyd_badge__ {\n        position: fixed; bottom: 14px; right: 14px; z-index: 2147483647;\n        display: inline-flex; align-items: center; gap: 6px;\n        padding: 6px 12px; border-radius: 6px;\n        background: rgba(14,15,17,0.78); color: #F0F0EC;\n        font: 600 12px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;\n        text-decoration: none; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);\n        transition: background 140ms ease, transform 140ms ease;\n        box-shadow: 0 4px 14px -6px rgba(0,0,0,.45);\n        contain: paint;\n    }\n    #__sleyd_badge__:hover { background: rgba(14,15,17,0.95); transform: translateY(-1px); }\n    html[dir=\"rtl\"] #__sleyd_badge__ { right: auto; left: 14px; }\n    @media print { #__sleyd_badge__ { display: none !important; } }\n</style>\n</body>\n</html>\n`;\n\nreturn [{ json: { data: finalHtml.trim() } }];\n} catch (__err) {\n  return [{ json: {\n    __workflowError: true,\n    node: \"Final Merger\",\n    message: (__err && __err.message) ? String(__err.message) : String(__err),\n    stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : ''\n  } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        1312
+      ],
+      "name": "Final Merger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fields = $('Format Teks1').first().json;\nconst brandName = fields.brandName || 'presentasi';\nfunction slugify(text) {\n  return String(text).toLowerCase().trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9\\s-]/g, '').replace(/\\s+/g, '-').replace(/-+/g, '-').slice(0, 30);\n}\nconst suffix = Array.from({ length: 4 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');\nconst slug = `${slugify(brandName) || 'presentasi'}-${suffix}`;\nreturn [{ json: { ...$input.first().json, slug, alias: `${slug}.slides.sleyd.com` } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1920,
+        1104
+      ],
+      "name": "Generate Slug"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1328,
+        1104
+      ],
+      "name": "Wait"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.vercel.com/v2/deployments/{{ $json.id || $json.uid }}/aliases",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"alias\": \"{{ $('Generate Slug').item.json.alias }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1184,
+        1104
+      ],
+      "name": "Vercel Alias"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{ '<div style=\"max-width:680px;margin:40px auto;padding:32px;font-family:Inter,Arial,sans-serif;text-align:center\"><h1 style=\"margin-bottom:12px\">Presentasi berhasil dibuat</h1><p style=\"color:#64748b;margin-bottom:24px\">Simpan tautan berikut agar presentasi dapat dibuka kembali.</p><p style=\"word-break:break-all;padding:14px;background:#f1f5f9;border-radius:10px\">https://' + $('Generate Slug').first().json.alias + '</p><p style=\"margin:24px 0\"><a href=\"https://' + $('Generate Slug').first().json.alias + '\" target=\"_blank\" rel=\"noopener\" style=\"display:inline-block;padding:12px 22px;border-radius:10px;background:#ff5a47;color:#fff;text-decoration:none;font-weight:700\">Buka Presentasi</a></p><p style=\"font-size:14px;color:#64748b\">Pada slide terakhir tersedia tombol PDF, PPT, dan HTML untuk mengunduh hasil.</p></div>' }}"
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        -1040,
+        1104
+      ],
+      "name": "Form Ending"
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher — auto-added]\ntry {\n// ===== SANITIZE HTML — pembersih + safety net =====\nconst item = $input.first().json;\n\n// Cek semua kemungkinan field di mana chainLlm v1.9 bisa menyimpan hasilnya.\n// Urutan penting: cek yang paling umum dulu, lalu nested/varian.\nlet raw =\n  item.output ??\n  item.text ??\n  item.content ??\n  item.response ??\n  item.data ??\n  item.result ??\n  item.completion ??\n  (item.message && item.message.content) ??\n  (item.response && item.response.text) ??\n  (item.data && item.data.text) ??\n  '';\n\nif (typeof raw === 'object') raw = JSON.stringify(raw);\nraw = String(raw || '').trim();\n\n// Kalau benar-benar kosong, JANGAN throw. Ganti dengan slide placeholder\n// yang jujur menyatakan \"slide ini gagal digenerate\" — supaya presentasi\n// tetap lengkap dan user bisa retry per slide, bukan gagal total.\nif (!raw) {\n  const slideNum = item.slideNumber || item._slideNumber || '?';\n  const availableKeys = Object.keys(item).join(', ') || '(tidak ada)';\n  console.warn(\n    `[Sanitize HTML] Slide ${slideNum} return kosong. Field tersedia: ${availableKeys}. ` +\n    `Cek node Slide Designer atas untuk struktur output aslinya.`\n  );\n\n  const fallback =\n    `<div class=\"slide-container flex flex-col items-center justify-center p-16 bg-[#070C15] text-[#EAF1F5]\" data-layout=\"fallback\">` +\n      `<div class=\"text-xs uppercase tracking-widest text-slate-400 mb-4 editable-text\">Slide ${slideNum} · Pembuatan Gagal</div>` +\n      `<h1 class=\"text-3xl font-semibold mb-3 editable-text\" style=\"font-family:'Space Grotesk',sans-serif\">Slide ini belum berhasil dibuat</h1>` +\n      `<p class=\"text-base text-slate-300 max-w-md text-center editable-text\">AI tidak mengembalikan konten untuk slide ini. Silakan coba generate ulang, atau lanjutkan dengan slide lain.</p>` +\n    `</div>`;\n\n  return [{ json: { data: fallback } }];\n}\n\n// 1. Bersihkan sisa-sisa markdown fence\nraw = raw.replace(/```html/gi, '').replace(/```/g, '').trim();\n\n// 2. Cari titik awal HTML yang valid (<!DOCTYPE atau <html atau <div>)\nconst startDoctype = raw.toLowerCase().indexOf('<!doctype');\nconst startHtml    = raw.toLowerCase().indexOf('<html');\nconst startDiv     = raw.toLowerCase().indexOf('<div');\n\nlet validStartIndex = 0;\nif (startDoctype !== -1) validStartIndex = startDoctype;\nelse if (startHtml !== -1) validStartIndex = startHtml;\nelse if (startDiv !== -1) validStartIndex = startDiv;\n\nlet cleanHtml = raw.substring(validStartIndex);\n\n// 3. AUTO-HEAL: kalau AI potong di tengah (kena maxTokens), tutup paksa\n//    tag utama supaya tidak jadi HTML rusak di browser.\nif (cleanHtml.toLowerCase().startsWith('<!doctype') || cleanHtml.toLowerCase().startsWith('<html')) {\n  if (!cleanHtml.toLowerCase().includes('</html>')) {\n    cleanHtml += '</div>';\n    if (!cleanHtml.toLowerCase().includes('</body>')) cleanHtml += '\\n</body>';\n    cleanHtml += '\\n</html>';\n  }\n} else {\n  // Kasus normal untuk Slide Designer: outputnya cuma satu <div>.\n  const openDivs  = (cleanHtml.match(/<div\\b/gi) || []).length;\n  const closeDivs = (cleanHtml.match(/<\\/div>/gi) || []).length;\n  for (let i = 0; i < openDivs - closeDivs; i++) cleanHtml += '</div>';\n}\n\nreturn [{ json: { data: cleanHtml.trim() } }];\n} catch (__err) {\n  return [{ json: {\n    __workflowError: true,\n    node: \"Sanitize HTML\",\n    message: (__err && __err.message) ? String(__err.message) : String(__err),\n    stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : ''\n  } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        2208
+      ],
+      "name": "Sanitize HTML"
+    },
+    {
+      "parameters": {
+        "jsCode": "// [Error catcher — auto-added]\ntry {\n// ===== SPLIT SLIDE + DECK THEME RESOLVER =====\n// Memecah approved outline jadi item per-slide, DAN menetapkan satu tema deck\n// yang konsisten (warna, font, dekorasi) untuk SEMUA slide.\n\nconst source = $input.first().json || {};\nconst approved = source.approvedOutline;\nif (!approved || !Array.isArray(approved.slides) || approved.slides.length === 0) {\n    throw new Error(\n        'APPROVED_OUTLINE_REQUIRED: approvedOutline.slides wajib tersedia dan tidak boleh kosong.'\n    );\n}\n\nconst data = {};\nif (approved && Array.isArray(approved.slides) && approved.slides.length > 0) {\n    data.slides = approved.slides.map((s, i) => {\n        const blocks = Array.isArray(s.blocks) ? s.blocks : [];\n        // Back-compat: flatten point blocks to approvedPoints for any legacy ref.\n        const pointTexts = blocks.filter(b => b && b.kind === 'point' && typeof b.text === 'string').map(b => b.text);\n        // First chart-bearing block surfaces a chart hint at slide scaffolding level.\n        const chartBlock = blocks.find(b => b && (b.kind === 'chart' || b.kind === 'statChart'));\n        const customImageUrl = String(s.customImageUrl || s.imageUrl || '').trim();\n        const imageKeyword = String(s.imageKeyword || s.imagePrompt || '').trim();\n        const rawImageRequired = s.imageRequired;\n        const explicitImageRequired = rawImageRequired === true || ['true', '1', 'yes'].includes(String(rawImageRequired || '').toLowerCase());\n        const hasExplicitImageChoice = rawImageRequired !== undefined && rawImageRequired !== null && rawImageRequired !== '';\n        return {\n            // Pertahankan seluruh data outline; hanya normalisasi field yang dipakai renderer.\n            ...s,\n            slideNumber: (typeof s.slideNumber === 'number' ? s.slideNumber : (typeof s.n === 'number' ? s.n : i + 1)),\n            purpose: s.purpose || 'concept',\n            layoutType: s.layoutType || 'bento-box-grid',\n            importance: s.importance || 'high',\n            animation: s.animation || 'fade-up',\n            // Keputusan eksplisit dari outline menang. Keyword hanya fallback untuk outline lama.\n            imageRequired: !customImageUrl && (hasExplicitImageChoice ? explicitImageRequired : Boolean(imageKeyword)),\n            imageKeyword: customImageUrl ? '' : imageKeyword,\n            ...(customImageUrl ? { imageUrl: customImageUrl } : {}),\n            chartType: chartBlock ? (chartBlock.chartType || 'bar') : (s.chartType || 'none'),\n            chartData: chartBlock ? (chartBlock.data || null) : (s.chartData || null),\n            // The user's approved content — Slide Designer MUST render these verbatim.\n            approvedTitle: (typeof s.title === 'string') ? s.title : '',\n            approvedSubtitle: (typeof s.subtitle === 'string') ? s.subtitle : '',\n            approvedBlocks: blocks,\n            approvedPoints: pointTexts,\n        };\n    });\n    if (Array.isArray(approved.deckThemes) && approved.deckThemes.length > 0) {\n        data.deckThemes = approved.deckThemes;\n    }\n}\n\n\n// ===== KATALOG TEMA DECK (60-30-10 & WCAG 2.2 Level AA Aman) =====\nconst CATALOG = {\n    \"midnight-blue\": { mood: \"korporat, elegan, laporan bisnis\", isDark: true, bg: \"#0F172A\", bgGrad: \"radial-gradient(120% 90% at 20% 0%, #1E293B, #0F172A)\", surface: \"rgba(255,255,255,0.06)\", text: \"#FFFFFF\", textSoft: \"#E4E4E7\", accent: \"#38BDF8\", accentSoft: \"rgba(56,189,248,0.16)\", accentRgb: \"56,189,248\", accent2Rgb: \"123,140,222\", accentContrast: \"#0F172A\", border: \"rgba(255,255,255,0.12)\", inkRgb: \"228,228,231\", chart: [\"#38BDF8\",\"#818CF8\",\"#34D399\",\"#FBBF24\",\"#F472B6\",\"#60A5FA\"], deco: \"\", fontHeading: \"Space Grotesk\", fontBody: \"Inter\" },\n    \"exotic-orange\": { mood: \"berani, energetik, peluncuran\", isDark: false, bg: \"#FFFBEB\", bgGrad: \"linear-gradient(180deg, #FEF3C7, #FFFBEB)\", surface: \"#FFFFFF\", text: \"#111111\", textSoft: \"#2D2D2D\", accent: \"#EA580C\", accentSoft: \"rgba(234,88,12,0.14)\", accentRgb: \"234,88,12\", accent2Rgb: \"245,158,11\", accentContrast: \"#FFFFFF\", border: \"rgba(0,0,0,0.08)\", inkRgb: \"45,45,45\", chart: [\"#EA580C\",\"#F59E0B\",\"#D97706\",\"#10B981\",\"#0284C7\",\"#6366F1\"], deco: \"\", fontHeading: \"Archivo\", fontBody: \"Manrope\" },\n    \"authentic-teal\": { mood: \"alam, kesehatan, sustainability\", isDark: true, bg: \"#062E28\", bgGrad: \"radial-gradient(120% 90% at 20% 0%, #0A433A, #062E28)\", surface: \"rgba(255,255,255,0.06)\", text: \"#FFFFFF\", textSoft: \"#E4E4E7\", accent: \"#10B981\", accentSoft: \"rgba(16,185,129,0.16)\", accentRgb: \"16,185,129\", accent2Rgb: \"52,211,153\", accentContrast: \"#062E28\", border: \"rgba(255,255,255,0.12)\", inkRgb: \"228,228,231\", chart: [\"#10B981\",\"#34D399\",\"#6EE7B7\",\"#FBBF24\",\"#38BDF8\",\"#F472B6\"], deco: \"\", fontHeading: \"Outfit\", fontBody: \"Plus Jakarta Sans\" },\n    \"sidecar-yellow\": { mood: \"ceria, kreatif, edukasi\", isDark: false, bg: \"#FEFCE8\", bgGrad: \"linear-gradient(180deg, #FEF9C3, #FEFCE8)\", surface: \"#FFFFFF\", text: \"#1C1917\", textSoft: \"#292524\", accent: \"#CA8A04\", accentSoft: \"rgba(202,138,4,0.14)\", accentRgb: \"202,138,4\", accent2Rgb: \"234,88,12\", accentContrast: \"#FFFFFF\", border: \"rgba(0,0,0,0.08)\", inkRgb: \"41,37,36\", chart: [\"#CA8A04\",\"#EA580C\",\"#059669\",\"#0284C7\",\"#7C3AED\",\"#DB2777\"], deco: \"\", fontHeading: \"Sora\", fontBody: \"Manrope\" },\n    \"atlantic-blue\": { mood: \"profesional, teknologi, SaaS\", isDark: true, bg: \"#0B192C\", bgGrad: \"radial-gradient(120% 90% at 80% -10%, #1E3E62, #0B192C)\", surface: \"rgba(255,255,255,0.06)\", text: \"#FFFFFF\", textSoft: \"#E4E4E7\", accent: \"#0071E3\", accentSoft: \"rgba(0,113,227,0.18)\", accentRgb: \"0,113,227\", accent2Rgb: \"96,165,250\", accentContrast: \"#FFFFFF\", border: \"rgba(255,255,255,0.12)\", inkRgb: \"228,228,231\", chart: [\"#0071E3\",\"#60A5FA\",\"#93C5FD\",\"#FBBF24\",\"#34D399\",\"#F472B6\"], deco: \"\", fontHeading: \"Space Grotesk\", fontBody: \"Inter\" },\n    \"soft-sky-blue\": { mood: \"segar, produk, startup\", isDark: false, bg: \"#F0F9FF\", bgGrad: \"linear-gradient(180deg, #E0F2FE, #F0F9FF)\", surface: \"#FFFFFF\", text: \"#0F172A\", textSoft: \"#334155\", accent: \"#0284C7\", accentSoft: \"rgba(2,132,199,0.14)\", accentRgb: \"2,132,199\", accent2Rgb: \"234,88,12\", accentContrast: \"#FFFFFF\", border: \"rgba(0,0,0,0.08)\", inkRgb: \"51,65,85\", chart: [\"#0284C7\",\"#0EA5E9\",\"#38BDF8\",\"#F59E0B\",\"#10B981\",\"#6366F1\"], deco: \"\", fontHeading: \"Outfit\", fontBody: \"Plus Jakarta Sans\" },\n    \"masterpiece-red\": { mood: \"premium, fashion, brand mewah\", isDark: true, bg: \"#1C1014\", bgGrad: \"radial-gradient(120% 90% at 20% 0%, #3B1B26, #1C1014)\", surface: \"rgba(255,255,255,0.06)\", text: \"#FFFFFF\", textSoft: \"#E4E4E7\", accent: \"#F43F5E\", accentSoft: \"rgba(244,63,94,0.18)\", accentRgb: \"244,63,94\", accent2Rgb: \"251,113,133\", accentContrast: \"#FFFFFF\", border: \"rgba(255,255,255,0.12)\", inkRgb: \"228,228,231\", chart: [\"#F43F5E\",\"#FB7185\",\"#FDA4AF\",\"#FBBF24\",\"#38BDF8\",\"#A78BFA\"], deco: \"\", fontHeading: \"Playfair Display\", fontBody: \"Inter\" },\n    \"minimal-light\": { mood: \"minimalis bersih, akademik, editorial\", isDark: false, bg: \"#F9F9F6\", bgGrad: \"#F9F9F6\", surface: \"#FFFFFF\", text: \"#111111\", textSoft: \"#2D2D2D\", accent: \"#0071E3\", accentSoft: \"rgba(0,113,227,0.12)\", accentRgb: \"0,113,227\", accent2Rgb: \"14,165,233\", accentContrast: \"#FFFFFF\", border: \"rgba(0,0,0,0.09)\", inkRgb: \"45,45,45\", chart: [\"#0071E3\",\"#0284C7\",\"#059669\",\"#D97706\",\"#6366F1\",\"#DC2626\"], deco: \"\", fontHeading: \"Outfit\", fontBody: \"Inter\" },\n    \"minimal-dark\": { mood: \"modern tech, SaaS, launching\", isDark: true, bg: \"#121212\", bgGrad: \"#121212\", surface: \"rgba(255,255,255,0.05)\", text: \"#FFFFFF\", textSoft: \"#E4E4E7\", accent: \"#60A5FA\", accentSoft: \"rgba(96,165,250,0.18)\", accentRgb: \"96,165,250\", accent2Rgb: \"147,197,253\", accentContrast: \"#121212\", border: \"rgba(255,255,255,0.12)\", inkRgb: \"228,228,231\", chart: [\"#60A5FA\",\"#38BDF8\",\"#818CF8\",\"#34D399\",\"#FBBF24\",\"#F472B6\"], deco: \"\", fontHeading: \"Space Grotesk\", fontBody: \"Inter\" },\n    \"warm-sand\": { mood: \"kreatif, personal, lifestyle, kuliner\", isDark: false, bg: \"#EFEFE8\", bgGrad: \"#EFEFE8\", surface: \"#FFFFFF\", text: \"#1C1917\", textSoft: \"#44403C\", accent: \"#D97706\", accentSoft: \"rgba(217,119,6,0.14)\", accentRgb: \"217,119,6\", accent2Rgb: \"180,83,9\", accentContrast: \"#FFFFFF\", border: \"rgba(0,0,0,0.08)\", inkRgb: \"68,64,60\", chart: [\"#D97706\",\"#B45309\",\"#059669\",\"#0284C7\",\"#7C3AED\",\"#DB2777\"], deco: \"\", fontHeading: \"Fraunces\", fontBody: \"Plus Jakarta Sans\" },\n    \"corporate-clean\": { mood: \"keuangan, hukum, korporat formal\", isDark: false, bg: \"#F8FAFC\", bgGrad: \"#F8FAFC\", surface: \"#FFFFFF\", text: \"#0F172A\", textSoft: \"#334155\", accent: \"#0284C7\", accentSoft: \"rgba(2,132,199,0.14)\", accentRgb: \"2,132,199\", accent2Rgb: \"79,70,229\", accentContrast: \"#FFFFFF\", border: \"rgba(0,0,0,0.08)\", inkRgb: \"51,65,85\", chart: [\"#0284C7\",\"#4F46E5\",\"#059669\",\"#D97706\",\"#DC2626\",\"#7C3AED\"], deco: \"\", fontHeading: \"Plus Jakarta Sans\", fontBody: \"Inter\" },\n    \"luxury-gold\": { mood: \"mewah, prestisius, investasi\", isDark: true, bg: \"#121212\", bgGrad: \"radial-gradient(120% 90% at 50% 0%, #242424, #121212)\", surface: \"rgba(255,255,255,0.05)\", text: \"#FFFFFF\", textSoft: \"#E4E4E7\", accent: \"#D4AF37\", accentSoft: \"rgba(212,175,55,0.18)\", accentRgb: \"212,175,55\", accent2Rgb: \"245,158,11\", accentContrast: \"#121212\", border: \"rgba(212,175,55,0.25)\", inkRgb: \"228,228,231\", chart: [\"#D4AF37\",\"#F59E0B\",\"#38BDF8\",\"#34D399\",\"#A78BFA\",\"#F472B6\"], deco: \"\", fontHeading: \"Playfair Display\", fontBody: \"Inter\" }\n};\n\n\n\n// ===== FONT PAIRING ENGINE (Fontjoy contrast principle) =====\n// Fonts grouped by mood — each theme maps to a mood group.\n// Multiple [heading, body] pairs per group = real variety across decks.\n// Principle: serif+sans = high contrast (premium), sans+sans with\n// different classifications = medium contrast (tech/modern).\nconst FONT_POOLS = {\n    \"corporate\": [\n        [\"Space Grotesk\",\"Inter\"],[\"Libre Baskerville\",\"Source Sans 3\"],\n        [\"Work Sans\",\"IBM Plex Sans\"],[\"DM Sans\",\"Inter\"],\n        [\"Space Grotesk\",\"Source Sans 3\"],[\"Libre Baskerville\",\"Manrope\"]\n    ],\n    \"tech\": [\n        [\"Sora\",\"Inter\"],[\"DM Sans\",\"IBM Plex Sans\"],\n        [\"Space Grotesk\",\"Manrope\"],[\"Work Sans\",\"Inter\"],\n        [\"Archivo\",\"IBM Plex Sans\"],[\"Sora\",\"Source Sans 3\"]\n    ],\n    \"bold\": [\n        [\"Archivo\",\"Manrope\"],[\"Bricolage Grotesque\",\"Plus Jakarta Sans\"],\n        [\"Archivo\",\"Inter\"],[\"Work Sans\",\"Manrope\"],\n        [\"Bricolage Grotesque\",\"Inter\"],[\"Poppins\",\"Manrope\"]\n    ],\n    \"premium\": [\n        [\"Playfair Display\",\"Source Sans 3\"],[\"DM Serif Display\",\"Manrope\"],\n        [\"Lora\",\"Inter\"],[\"Playfair Display\",\"Manrope\"],\n        [\"DM Serif Display\",\"Source Sans 3\"],[\"Instrument Serif\",\"Plus Jakarta Sans\"]\n    ],\n    \"editorial\": [\n        [\"Fraunces\",\"Inter\"],[\"Newsreader\",\"Source Sans 3\"],\n        [\"Lora\",\"Karla\"],[\"Instrument Serif\",\"Inter\"],\n        [\"Fraunces\",\"Karla\"],[\"Newsreader\",\"Manrope\"]\n    ],\n    \"friendly\": [\n        [\"Outfit\",\"Plus Jakarta Sans\"],[\"Poppins\",\"Nunito Sans\"],\n        [\"Outfit\",\"DM Sans\"],[\"Sora\",\"Plus Jakarta Sans\"],\n        [\"Poppins\",\"DM Sans\"],[\"Outfit\",\"Nunito Sans\"]\n    ],\n    \"nature\": [\n        [\"Outfit\",\"DM Sans\"],[\"Instrument Serif\",\"Plus Jakarta Sans\"],\n        [\"Newsreader\",\"Plus Jakarta Sans\"],[\"Outfit\",\"Source Sans 3\"],\n        [\"Lora\",\"Plus Jakarta Sans\"],[\"Fraunces\",\"DM Sans\"]\n    ],\n    \"wellness\": [\n        [\"Fraunces\",\"Plus Jakarta Sans\"],[\"Instrument Serif\",\"Nunito Sans\"],\n        [\"Lora\",\"Plus Jakarta Sans\"],[\"DM Serif Display\",\"DM Sans\"],\n        [\"Fraunces\",\"Nunito Sans\"],[\"Outfit\",\"Karla\"]\n    ]\n};\n\n// Map each theme to its mood group for font selection\nconst THEME_FONT_MOOD = {\n    \"midnight-blue\":      \"corporate\",\n    \"exotic-orange\":      \"bold\",\n    \"authentic-teal\":     \"nature\",\n    \"sidecar-yellow\":     \"friendly\",\n    \"atlantic-blue\":      \"tech\",\n    \"soft-sky-blue\":      \"friendly\",\n    \"masterpiece-red\":    \"premium\",\n    \"dirty-white\":        \"editorial\",\n    \"champion-blue\":      \"tech\",\n    \"lavender-tonic\":     \"wellness\",\n    \"white-convolvulus\":  \"editorial\",\n    \"yellow-green-shade\": \"nature\"\n};\n\n\nconst THEME_NAMES = Object.keys(CATALOG);\n\n// Bobot pemilihan: tema \"aman\" yang cenderung over-dipilih diberi bobot lebih\n// kecil supaya variasi antar-deck lebih merata (bukan itu-itu saja).\nconst WEIGHTS = {\n    \"midnight-blue\": 0.8, \"champion-blue\": 0.8,\n    \"exotic-orange\": 0.9, \"sidecar-yellow\": 0.9,\n    \"yellow-green-shade\": 0.9, \"lavender-tonic\": 0.9\n};\nfunction weightOf(n) { return WEIGHTS[n] != null ? WEIGHTS[n] : 1; }\n\n// Seed deterministik dari KONTEN: deck berbeda -> hasil berbeda, deck sama -> stabil.\nfunction contentSeed() {\n    let s = 'sleyd';\n    try {\n        const fmt = $('Format Teks1').first().json || {};\n        s = String(fmt.brandName || '') + '|' + String(fmt.persona || '') + '|' +\n            String(fmt.targetAudience || '') + '|' + String((fmt.material || '').length) + '|' +\n            String((Array.isArray(data.slides) ? data.slides.length : 0));\n    } catch (e) {}\n    let h = 2166136261;\n    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }\n    return h >>> 0;\n}\nfunction weightedPick(seed) {\n    const total = THEME_NAMES.reduce(function (a, n) { return a + weightOf(n); }, 0);\n    let r = ((seed % 100000) / 100000) * total;\n    for (let i = 0; i < THEME_NAMES.length; i++) { r -= weightOf(THEME_NAMES[i]); if (r <= 0) return THEME_NAMES[i]; }\n    return THEME_NAMES[seed % THEME_NAMES.length];\n}\n\n// Kandidat tema berasal dari approved outline; jika kosong gunakan pilihan deterministik.\nlet candidates = [];\nif (Array.isArray(data.deckThemes)) candidates = data.deckThemes.slice();\nelse if (data.deckTheme) candidates = [data.deckTheme];\ncandidates = candidates.map(function (x) { return String(x || '').trim().toLowerCase(); }).filter(function (n) { return CATALOG[n]; });\n\n// Override manual dari frontend (Format Teks.themeOverride) menang atas\n// kandidat outline maupun pilihan acak berbobot — TAPI hanya jika itu key\n// katalog yang valid. Kosong/tidak dikenal -> jatuh ke auto-selection.\nlet themeOverride = '';\ntry { themeOverride = String($('Format Teks1').first().json.themeOverride || '').trim().toLowerCase(); } catch (e) {}\n\nconst seed = contentSeed();\nlet themeName;\nif (themeOverride && CATALOG[themeOverride]) {\n    themeName = themeOverride;\n} else if (candidates.length) {\n    // Rotasi antar kandidat outline — jadi bukan selalu peringkat #1.\n    themeName = candidates[seed % candidates.length];\n} else {\n    themeName = weightedPick(seed);\n}\nconst baseTheme = CATALOG[themeName];\n\n// Select font pair from mood-matched pool for variety\nconst fontMood = THEME_FONT_MOOD[themeName] || \"corporate\";\nconst fontPool = FONT_POOLS[fontMood] || FONT_POOLS[\"corporate\"];\nconst fontIdx = ((seed >>> 3) ^ (seed >>> 7)) % fontPool.length;\nconst chosenPair = fontPool[fontIdx];\nconst t = Object.assign({}, baseTheme, { fontHeading: chosenPair[0], fontBody: chosenPair[1] });\n\nconst styleVars = [\n    \"--bg:\" + t.bg,\n    \"--bg-grad:\" + t.bgGrad,\n    \"--surface:\" + t.surface,\n    \"--text:\" + t.text,\n    \"--text-soft:\" + t.textSoft,\n    \"--accent:\" + t.accent,\n    \"--accent-rgb:\" + t.accentRgb,\n    \"--accent2-rgb:\" + t.accent2Rgb,\n    \"--accent-soft:rgba(\" + t.accentRgb + \",0.12)\",\n    \"--accent-contrast:\" + t.accentContrast,\n    \"--border:\" + t.border,\n    \"--ink-rgb:\" + t.inkRgb,\n    \"--chart-colors:\" + t.chart.join(\",\"),\n    \"--font-heading:'\" + t.fontHeading + \"'\",\n    \"--font-body:'\" + t.fontBody + \"'\",\n    \"--font-display:clamp(2.5rem, 1.5rem + 5vw, 4.5rem)\",\n    \"--font-heading-size:clamp(1.85rem, 1.35rem + 2.5vw, 2.75rem)\",\n    \"--font-body-size:clamp(1rem, 0.95rem + 0.25vw, 1.125rem)\",\n    \"--font-caption:clamp(0.75rem, 0.7rem + 0.2vw, 0.875rem)\"\n].join(\";\");\n\nconst deckTheme = {\n    name: themeName,\n    summary: t.mood,\n    mode: t.isDark ? \"gelap\" : \"terang\",\n    isDark: t.isDark,\n    baseClass: (\"slide-base \" + t.deco).trim(),\n    styleVars: styleVars,\n    accent: t.accent,\n    accentContrast: t.accentContrast,\n    fontHeading: t.fontHeading,\n    fontBody: t.fontBody,\n    chartColors: t.chart.join(\",\")\n};\n\nconst slides = Array.isArray(data.slides) ? data.slides : [];\n\nreturn slides.map(slide => ({ json: { ...slide, deckTheme } }));\n} catch (__err) {\n  return [{ json: {\n    __workflowError: true,\n    node: \"Split Slide\",\n    message: (__err && __err.message) ? String(__err.message) : String(__err),\n    stack: (__err && __err.stack) ? String(__err.stack).slice(0, 1500) : ''\n  } }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1568,
+        1648
+      ],
+      "name": "Split Slide"
+    },
+    {
+      "parameters": {
+        "url": "https://api.pexels.com/v1/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.imageKeyword || $json.imagePrompt || $json.approvedTitle || 'business presentation' }}"
+            },
+            {
+              "name": "per_page",
+              "value": "2"
+            },
+            {
+              "name": "orientation",
+              "value": "landscape"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -240,
+        1520
+      ],
+      "name": "Fetch Image Pexels",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $json || {};\nconst photos = Array.isArray(input.photos) ? input.photos : [];\nconst first = photos[0] || {};\nconst imageUrl = input.customImageUrl || input.imageUrl || first.src?.large2x || first.src?.large || first.src?.medium || null;\nconst { photos: _photos, page, per_page, total_results, next_page, error, ...slideData } = input;\nreturn { json: { ...slideData, imageUrl } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        1632
+      ],
+      "name": "Merge Image URL"
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "data",
+              "renameField": true,
+              "outputFieldName": "html_chunks"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        1344
+      ],
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "af1094ec-0926-499e-b006-648302dc60cb",
+              "leftValue": "={{ $json.imageRequired === true && !$json.imageUrl && !$json.customImageUrl }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -480,
+        1712
+      ],
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -16,
+        1632
+      ],
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-5.6-luna"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 6000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        688,
+        2032
+      ],
+      "name": "OpenAI Chat Model1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -736,
+        1664
+      ],
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=BAHASA OUTPUT (WAJIB, MUTLAK, TIDAK BOLEH DILANGGAR): {{ $('Format Teks1').item.json.outputLanguage === 'en' ? 'English' : ($('Format Teks1').item.json.outputLanguage === 'ar' ? 'العربية' : 'Bahasa Indonesia') }}\nSeluruh headline, sub-headline, body, bullet, stat label, watermark WAJIB 100% dalam bahasa di atas. Gunakan bahasa output di atas meskipun bahasa Materi Asli berbeda. Nama merek boleh tetap asli. Istilah teknis absolut boleh dicetak miring.\n\n=================================================\nPRINSIP UTAMA — HORMATI OUTLINE (JANGAN AI-SLOP)\n=================================================\nAnda WAJIB mematuhi outline yang di-approve user. Kalau outline tidak menyebut ikon di suatu poin — JANGAN pasang ikon. Kalau outline tidak minta dekorasi latar — JANGAN buat pattern/blob/grid. Kalau tidak ada brandName — JANGAN buat watermark. Kalau blok cuma point sederhana — JANGAN bungkus kartu bershadow. Filosofi: less is more. Konten user > dekorasi AI. Slide yang bersih & typography-forward lebih premium daripada slide berkartu bento penuh ikon.\n\n\n=================================================\nOUTLINE APPROVAL (WAJIB DICEK PERTAMA)\n=================================================\nSlide ini mungkin sudah melewati review outline oleh user (Phase 1). Cek field berikut di data slide:\n\n- approvedTitle: \"{{ $json.approvedTitle || '' }}\"\n- approvedSubtitle: \"{{ $json.approvedSubtitle || '' }}\"\n- approvedBlocks (JSON): {{ JSON.stringify($json.approvedBlocks || []) }}\n\nJika approvedTitle TIDAK KOSONG DAN approvedBlocks TIDAK KOSONG (mode HONOR):\n  • PAKAI approvedTitle PERSIS sebagai HEADLINE utama slide — JANGAN ubah wording, parafrase, atau terjemah.\n  • Jika approvedSubtitle tidak kosong, pakai PERSIS sebagai sub-judul.\n  • RENDER setiap blok di approvedBlocks BERURUTAN sesuai field `kind`-nya, PERSIS isinya — JANGAN gabung, pecah, tambah, hapus, atau menulis ulang blok:\n      - point       → satu poin/bullet; `text` verbatim. Jika ada `note`, tampilkan sebagai narasi kecil di bawah poin (verbatim).\n      - paragraph   → satu paragraf narasi; `text` verbatim.\n      - quote       → blockquote; `text` verbatim, `attribution` sebagai sumber.\n      - stat        → angka besar (`value`) + `label`; jika ada `delta`, tampilkan sebagai perubahan (hijau bila naik, merah bila turun).\n      - chart       → render <canvas> Chart.js memakai chartData KANONIK pada DATA SLIDE; approvedBlocks tetap menjadi sumber teks/caption.\n      - statChart   → tampilkan stats[] secara ringkas DAN chart dari chartData KANONIK. Jangan membuat ulang angka atau mengubah unit.\n      - timeline    → daftar kronologis dari `items[]` (time · label · text).\n      - comparison  → tabel: `columns` sebagai header kolom; tiap `rows[]` = label + `cells[]` sejajar kolom.\n      - imageCaption→ gambar (pakai `imageKeyword` blok atau slide) + `caption`.\n      - iconList    → daftar berikon; tiap item `icon` (opsional) + `text`.\n  • Anda BOLEH menata visual (layout, warna aksen, spacing, ikon, posisi) sesuai layoutType & deckTheme — TAPI SEMUA teks & angka harus PERSIS dari approvedBlocks. Boleh menambah satu sub-heading transisi pendek bila layout memerlukan, tapi JANGAN menulis ulang konten.\n  • Aturan STRICT GROUNDING (jangan mengarang angka) TETAP BERLAKU.\n\nJika approvedTitle ATAU approvedBlocks KOSONG (user bypass Phase 1 / slide baru tanpa outline):\n  • Ikuti aturan konten normal di bawah — tulis dari Materi Asli + Blueprint seperti biasa.\n\n=================================================\n\nAnda adalah Senior Presentation Copywriter & Front-End Engineer Sleyd AI.\n\nTugas Anda: menulis KONTEN slide sekaligus langsung mendesainnya menjadi 1 (SATU) komponen HTML <div>, dalam satu langkah, berdasarkan data blueprint dan TEMA DECK yang diberikan.\n\n=================================================\nDATA SLIDE (HANYA UNTUK SLIDE INI)\n=================================================\nJSON Blueprint: {{ JSON.stringify({\n  slideNumber: $json.slideNumber,\n  purpose: $json.purpose,\n  layoutType: $json.layoutType,\n  importance: $json.importance,\n  animation: $json.animation,\n  imageRequired: $json.imageRequired,\n  imageKeyword: $json.imageKeyword,\n  imageUrl: $json.imageUrl,\n  visualizationKind: $json.visualizationKind,\n  chartType: $json.chartType,\n  chartData: $json.chartData,\n  chartIndexAxis: $json.chartIndexAxis,\n  chartConfigJson: $json.chartConfigJson,\n  stats: $json.stats,\n  visualizationReason: $json.visualizationReason\n}) }}\n\nMateri Asli: {{ $('Format Teks1').item.json.material }}\nBrand Name: {{ $('Format Teks1').item.json.brandName }}\nTarget Persona: {{ $('Format Teks1').item.json.persona }}\nTarget Audiens: {{ $('Format Teks1').item.json.targetAudience }}\n\n=================================================\nTEMA DECK (WAJIB DIPAKAI — INI YANG MEMBUAT SEMUA SLIDE JADI SATU KESATUAN)\n=================================================\nNama tema     : {{ $json.deckTheme.name }}\nMood tema     : {{ $json.deckTheme.summary }}\nMode          : {{ $json.deckTheme.mode }}\nFont Judul    : {{ $json.deckTheme.fontHeading }}\nFont Isi      : {{ $json.deckTheme.fontBody }}\nWarna aksen   : {{ $json.deckTheme.accent }}\nKelas dasar   : {{ $json.deckTheme.baseClass }}\nStyle tokens  : {{ $json.deckTheme.styleVars }}\n\nATURAN TEMA (MUTLAK):\n- Elemen <div class=\"slide-container ...\"> WAJIB memuat: class=\"slide-container {{ $json.deckTheme.baseClass }} <class-animasi> p-12\" dan atribut style yang DIMULAI dengan token berikut PERSIS: style=\"{{ $json.deckTheme.styleVars }}\"\n  (Anda boleh menambahkan properti style lain SETELAH token itu, dipisah titik koma.)\n- SEMUA WARNA (teks, latar kartu, garis, aksen) WAJIB memakai CSS variable dari token tema via inline style, BUKAN warna Tailwind acak:\n    - teks utama      -> style=\"color:var(--text)\"\n    - teks sekunder   -> style=\"color:var(--text-soft)\"\n    - latar kartu     -> style=\"background:var(--surface)\"\n    - garis/pembatas  -> style=\"border-color:var(--border)\" atau class \"hairline\"\n    - warna aksen     -> style=\"color:var(--accent)\" / \"background:var(--accent)\" (teks di atas aksen: var(--accent-contrast))\n    - penekanan kata di headline -> boleh membungkus 1 kata/frasa singkat dalam headline dengan <span style=\"color:var(--accent)\">...</span> untuk variasi visual — lihat aturan VARIASI WARNA TEKS di bawah\n- DILARANG memakai class warna Tailwind (bg-slate-900, text-white, text-emerald-400, border-gray-300, dst) untuk teks/latar/garis. Tailwind HANYA untuk layout, spacing, ukuran, weight, radius, flex/grid.\n- Judul WAJIB memakai style=\"font-family:'{{ $json.deckTheme.fontHeading }}',sans-serif\". Body memakai font isi (sudah otomatis dari .slide-base, tidak perlu diulang).\n\n=================================================\nSTRICT GROUNDING RULE (ATURAN MUTLAK ANTI-HALUSINASI)\n=================================================\n1. DILARANG KERAS memproduksi angka, persentase, tahun, atau nama entitas yang tidak secara eksplisit tertulis di dalam Materi Asli.\n2. Jika layout meminta angka utama (big-stat-callout / key_kpi / chart) tetapi Materi Asli TIDAK memiliki data numerik, DILARANG mengarang angka. Ganti elemen tersebut menjadi kutipan (quote) atau sorotan teks pendek (highlight).\n3. chartData WAJIB dipakai APA ADANYA dari blueprint. Jika chartType = \"none\" atau chartData null, JANGAN membuat chart.\n4. Posisikan sistem murni sebagai \"Penyaring dan Peringkas\", bukan \"Pengarang\".\n\n=================================================\nBAGIAN A — ATURAN PENULISAN KONTEN\n=================================================\n1. Sesuaikan tone dengan Target Persona.\n2. Gunakan purpose sebagai panduan isi:\n   - key_kpi -> 1 angka statistik utama (besar, jelas) + label singkat\n   - timeline/roadmap -> 3-5 poin kronologis\n   - recommendation -> poin tindakan konkret\n   - cover -> headline kuat (maks 8 kata, jangan salin judul materi mentah), subheadline (maks 12 kata), 1 hook (maks 15 kata)\n3. Konten HARUS berasal dari Materi Asli. Jika data spesifik tidak ada, ringkas yang paling relevan — jangan mengarang fakta baru.\n4. Sebut nama Brand secara natural HANYA di slide cover dan closing.\n5. Jangan menulis instruksi desain sebagai teks konten.\n\nBATASAN PANJANG TEKS (WAJIB, cegah overflow 16:9):\n- Headline: maks 50 karakter.\n- Sub-headline / Label: maks 80 karakter.\n- Body / Paragraf: maks 120 karakter per blok.\n- Bullet: maks 80 karakter per poin (maks 4 poin per slide).\nUntuk blok teks panjang WAJIB tambahkan class \"line-clamp-3 overflow-hidden text-ellipsis\" (atau \"line-clamp-2\" untuk teks kecil).\n\n=================================================\nATURAN MUAT 16:9 & KOMPOSISI (PALING PENTING — BACA DULU)\n=================================================\nSlide berukuran TETAP 1280x720 px. Konten yang melebihi tinggi 720px akan TERPOTONG. Karena itu:\n\n1. MUAT PENUH: seluruh konten (judul, teks, kartu, gambar, chart) WAJIB muat dalam 1280x720 TANPA terpotong. Lebih baik ringkas daripada penuh sesak.\n\n2. BATAS KEPADATAN (agar pasti muat):\n   - Maksimal 1 headline + 1 subheadline + 1 blok teks pendukung per slide.\n   - Maksimal 3 kartu/kolom sejajar (bento/grid), ATAU maksimal 4 item list/step. JANGAN menumpuk kartu vertikal sampai memenuhi tinggi.\n   - Jika materi banyak, RINGKAS jadi poin terpenting — jangan paksakan semua masuk.\n\n3. ISI FRAME — JANGAN BANYAK RUANG KOSONG: manfaatkan seluruh bidang. DILARANG membiarkan area kosong luas tanpa tujuan (patokan: jangan biarkan >25% slide kosong melompong). Cara mengisi dengan elegan:\n   - Pakai layout 2 kolom: teks di satu sisi, VISUAL di sisi lain (gambar / chart / kartu statistik / bentuk aksen SVG). Untuk KPI: pasangkan angka besar dengan konteks (kartu pendukung, garis, atau chart).\n   - Untuk timeline/roadmap: pakai LEBAR PENUH (garis horizontal atau 2 kolom), bukan hanya daftar sempit di kiri.\n   - White space itu disengaja untuk fokus, BUKAN setengah slide dibiarkan kosong.\n\n4. WRAPPER FIT (WAJIB): bungkus SELURUH konten inti dalam satu wrapper:\n   <div class=\"slide-fit relative z-10 w-full h-full flex ...\">\n   Class \"slide-fit\" WAJIB ada — sistem memakainya untuk auto-scale pengaman bila konten sedikit melebihi. Watermark boleh di luar wrapper ini (absolute di pojok slide-container).\n\n\n=================================================\nTATA LETAK BYOL (BRING YOUR OWN LAYOUT) 12-KOLOM\n=================================================\nSlide 16:9 berukuran 1280x720 px.\nUntuk menghasilkan komposisi asimetris profesional dan bebas overflow:\n- Gunakan struktur CSS Grid 12-kolom pada wrapper konten utama:\n  `display: grid; grid-template-columns: repeat(12, 1fr); gap: 1.5rem; width: 100%; height: 100%;`\n- Pembagian Kolom Berdasarkan Kebutuhan:\n  • Cover / Hero: Judul & narasi di Kolom 1-9 (atau 1-12 centered), kicker badge di atas.\n  • Split / Two-Column: Kolom 1-6 teks narasi & poin, Kolom 7-12 gambar/grafik/kartu data.\n  • Three-Card / Bento: Tiga kartu sejajar (Kolom 1-4, 5-8, 9-12) dengan border hairline.\n  • Big Stat / KPI: Kolom 1-5 angka statistik raksasa (font-size: var(--font-display); color: var(--accent)), Kolom 6-12 konteks narasi dan delta badge.\n  • Timeline / Roadmap: Lintasan horizontal menyusuri 12 kolom secara seimbang.\n- PENEGASAN KATA KUNCI (10% AKSEN):\n  Bungkus 1-2 kata kunci paling penting dalam judul dengan:\n  `<mark class=\"rounded px-2 py-0.5\" style=\"background:var(--accent-soft); color:var(--accent)\">kata kunci</mark>`\n\n=================================================\nBAGIAN B — ATURAN DESAIN HTML (WAJIB)\n=================================================\n1. OUTPUT: HANYA satu elemen <div class=\"slide-container ...\"> ... </div>. Rasio 16:9. Gunakan padding p-12 (atau p-14 untuk cover) sebagai safe area — JANGAN p-20 (terlalu boros ruang).\n\n2. STRUKTUR WAJIB: seluruh konten inti berada dalam wrapper \"slide-fit\" (lihat ATURAN MUAT #4). Latar slide = solid color dari token tema (var(--bg)) — TITIK. DILARANG membuat elemen background sendiri: DILARANG polkadot/dot pattern, DILARANG gradient blob dekoratif, DILARANG grid overlay, DILARANG wave/aurora, DILARANG SVG hiasan yang menutupi background. Kalau outline tidak minta dekorasi, latar tetap polos. Elemen aksen visual (garis tipis, KPI besar, ikon indikator) boleh — asal punya alasan konten, bukan sekadar mengisi ruang kosong.\n\n3. LAYOUT sesuai layoutType (15 opsi resmi — deskripsi WAJIB dituruti):\n   - cover                      -> hero: judul besar (font-heading, tracking-tight), subtitle opsional, brand kecil; tanpa bullet padat. Gambar hero full/bleed di kanan atau background halus.\n   - big-stat-callout           -> 1 angka raksasa class=\"kpi-number\" (color:var(--accent)) dominan; label singkat di bawah; sisanya kecil.\n   - sparkline-candlestick      -> angka pokok di kiri (kpi-number) + mini-chart tipis di kanan (canvas Chart.js kecil, tanpa axis/legend).\n   - ab-split-matrix            -> 2 kolom perbandingan (grid grid-cols-2 gap-10); heading kolom di atas, item paralel di bawah.\n   - hairline-timeline          -> daftar bertahap dengan class=\"hairline\" sebagai connector (horizontal atau vertikal); tiap step: time · label · text.\n   - blueprint-overlay          -> layout schematic: SVG garis-panah tipis (stroke var(--accent)) menghubungkan node/label; kesan blueprint teknis.\n   - floating-takeaway          -> 1 kartu ringkasan \"melayang\" (class=\"card\" + shadow) di atas latar bersih; sisi lain kosong untuk breathing room.\n   - bento-box-grid             -> grid asimetris beda-ukuran (mis. grid-cols-3 dengan col-span-2 kartu utama); tiap kartu class=\"card hover-card\".\n   - target-persona-avatar      -> 1 avatar/inisial besar di kiri (rounded-full, bg surface + border) + profil persona detail di kanan (nama, role, quote).\n   - hero-video-loop            -> full-bleed poster image (imageUrl) + overlay teks + badge play kecil di tengah bawah; tanpa autoplay video.\n   - lookbook-grid              -> grid gambar equal-cell (mis. grid-cols-3 gap-4), tiap sel object-cover rounded-2xl; sedikit teks caption di bawah.\n   - packaging-mockup-frame     -> 1 gambar produk terpusat (rounded-3xl, shadow lembut, ratio 4:5); label deskriptif kecil kiri/kanan.\n   - editorial-blockquote       -> kutipan besar typography-forward (font-heading, italic ok); atribusi kecil (text-sm, color:var(--text-soft)).\n   - step-by-step-path          -> langkah bertahap dengan connector garis (SVG path atau hairline); nomor step lingkaran kecil ber-accent.\n   - full-bleed-media-split     -> 2 kolom (grid-cols-2 gap-10): teks di satu kolom, gambar object-cover full-height di kolom lain.\n\n4. KOMPONEN SIAP PAKAI (pakai untuk konsistensi premium):\n   - Kartu        : class=\"card\"  (sudah punya surface + border + radius + shadow bertema)\n     KAPAN pakai kartu: untuk layoutType=\"bento-box-grid\", blok kind=\"comparison\"/\"statChart\", quote yang butuh containment. UNTUK bullet biasa (point, paragraph): JANGAN bungkus kartu — pakai typography + hairline divider saja. Kartu di setiap bullet membuat slide terlihat template SaaS AI.\n   - Kartu interaktif: tambahkan \"hover-card\"\n   - Garis tipis  : <hr class=\"hairline border-0\">  atau  <div class=\"hairline\"></div>\n   - Garis aksen  : <span class=\"accent-line animate-draw-x\" style=\"width:64px\"></span>\n   - Chip/label   : <span class=\"chip editable-text\">TEKS</span>\n   - Angka KPI    : <span class=\"kpi-number\" style=\"color:var(--accent)\">...</span>\n   - Divider hidup: <div class=\"divider-shimmer\" style=\"height:2px;width:120px\"></div>\n   - CTA sorot   : <button class=\"btn-specular chip\" style=\"cursor:default\">TEKS</button>  <em>(efek sorot metalik, cocok untuk CTA/label penting)</em>\n\n5. IKON — KAPAN & JUMLAH:\n   • Gunakan ikon HANYA untuk blok kind=\"iconList\" dari approvedBlocks, ATAU maksimal 1 ikon sebagai indikator kategori/aksen headline.\n   • Blok kind=\"point\", \"paragraph\", \"quote\", \"stat\" TIDAK boleh diberi ikon.\n   • DILARANG memasang ikon di setiap bullet — itu membuat slide terlihat generik/AI-generated.\n   FORMAT: WAJIB SVG garis (DILARANG emoji/unicode). Pakai class \"icon\" (stroke otomatis mengikuti aksen) dan salah satu path berikut, sisipkan langsung:\n   - Cek/selesai : <svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M20 6 9 17l-5-5\"/></svg>\n   - Panah kanan : <svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M5 12h14M13 5l7 7-7 7\"/></svg>\n   - Target      : <svg class=\"icon\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"4\"/></svg>\n   - Naik/tumbuh : <svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M17 7h4v4\"/></svg>\n   - Kilat/ide   : <svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M13 2 4 14h7l-1 8 9-12h-7z\"/></svg>\n   - Bintang     : <svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M12 3l2.9 6 6.1.9-4.5 4.3 1.1 6.1L12 17.8 6.4 20.3l1.1-6.1L3 9.9 9.1 9z\"/></svg>\n   - Perisai     : <svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z\"/></svg>\n   - Bendera     : <svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M5 21V4M5 4h11l-2 4 2 4H5\"/></svg>\n   Ukuran ikon boleh diubah via inline style (mis. style=\"width:20px;height:20px\").\n\n6. GAMBAR: jika imageUrl tersedia (bukan null), WAJIB pakai sebagai src <img> dengan crossorigin=\"anonymous\". PERLAKUAN gambar WAJIB BERBEDA sesuai layoutType — DILARANG selalu memakai resep ukuran yang sama di setiap slide (itu membuat semua gambar terlihat identik):\n   - cover, hero-video-loop: gambar FULL-BLEED — <img class=\"absolute inset-0 w-full h-full object-cover\"> sebagai background slide, dengan overlay scrim BERTEMA (BUKAN hitam polos): <div class=\"absolute inset-0\" style=\"background:linear-gradient(to top, var(--bg) 0%, transparent 55%)\"></div>. Scrim HANYA menutupi kira-kira 55% bagian BAWAH gambar (zona teks) — bagian ATAS gambar tetap terang & penuh warna, tidak digelapkan. DILARANG \"from-black/70\" atau overlay hitam polos apa pun di atas gambar — itu membuat cover terasa gelap/kusam meski temanya cerah. Scrim yang tertaut ke var(--bg) tetap menjamin teks di atasnya terbaca (rasio kontras var(--text) terhadap var(--bg) sudah divalidasi WCAG AA per tema).\n   - full-bleed-media-split: grid 2 kolom (grid-cols-2 gap-10) SEIMBANG — gambar object-cover MENGISI PENUH tinggi kolomnya (\"w-full h-full object-cover rounded-2xl\"), bukan dibatasi max-height kecil.\n   - packaging-mockup-frame: SATU gambar terpusat dengan rasio potret (\"aspect-[4/5] object-cover rounded-3xl\"), shadow lembut, dikelilingi ruang kosong — bukan mengisi penuh kolom.\n   - lookbook-grid: grid 2-3 gambar kecil sejajar (\"grid grid-cols-3 gap-3\", tiap sel \"aspect-square object-cover rounded-xl\") — bukan satu gambar besar.\n   - floating-takeaway, target-persona-avatar: gambar KECIL pendamping (maks ~30-35% lebar slide), bulat atau rounded-2xl, sebagai aksen — bukan dominan.\n   - layout lain (bento-box-grid, ab-split-matrix, dst): \"w-full h-full object-cover rounded-2xl\" di dalam kolom ber-tinggi tetap (mis. h-64 atau h-full tergantung grid), ATAU \"w-full h-auto max-h-[380px] object-cover rounded-2xl\" — pilih rasio (aspect-video, aspect-square, aspect-[4/3]) sesuai konten gambar, JANGAN selalu max-h-[380px] yang sama.\n   - DILARANG <img> dengan position absolute/fixed yang melayang menimpa headline/teks (KECUALI cover/hero-video-loop yang memang full-bleed background sesuai poin pertama). DILARANG gambar melebihi 55% lebar slide pada layout split BIASA (non-full-bleed).\n   - Jika imageUrl null (tidak ada URL gambar sama sekali): JANGAN buat <img> kosong — andalkan dekorasi tema atau bentuk SVG/aksen. DILARANG placeholder rusak.\n\n7. ANIMASI (WAJIB, pakai class PERSIS sesuai field \"animation\" dari blueprint — SATU momen gerak utama per slide, jangan semua elemen bergerak identik):\n   animation = \"fade-up\"     -> class \"animate-fade-up\" pada wrapper konten utama\n   animation = \"hero-reveal\" -> class \"animate-hero-reveal\" pada headline/hero utama\n   animation = \"split-reveal\"-> \"animate-split-left\" pada kolom kiri DAN \"animate-split-right\" pada kolom kanan\n   animation = \"cards-stagger\"-> \"animate-cards-stagger\" pada SETIAP kartu/item (bukan wrapper)\n   animation = \"step-flow\"   -> \"animate-step-flow\" pada SETIAP step berurutan\n   animation = \"counter-up\"  -> angka utama: <span class=\"counter-value kpi-number\" data-target=\"ANGKA_MURNI\" style=\"color:var(--accent)\">0</span> — ANGKA_MURNI hanya digit (tanpa %,+,koma); simbol (%, +, Rp) ditaruh DI LUAR span sebagai teks biasa. data-target WAJIB angka NYATA dari Materi Asli (bukan 0, bukan karangan). Jika Materi tidak punya angka relevan, JANGAN pakai counter/KPI — ganti jadi highlight teks pendek atau quote (lihat STRICT GROUNDING).\n   animation = \"timeline-draw\"-> <svg> dengan <line>/<path> panjang ber-stroke, beri class \"animate-timeline-draw\" (stroke pakai var(--accent)).\n      animation = \"masked-reveal\"  -> class \"animate-masked-reveal\" pada headline utama (wipe dari kiri ke kanan, efek topeng); gunakan \"delay-1\" dan \"delay-2\" pada sub-heading/elemen berikutnya\n   animation = \"pixel-swap\"     -> \"animate-pixel-swap\" pada SETIAP item/kartu (reveal blocky per-elemen, cocok untuk grid atau list item)\n   animation = \"antigravity\"    -> wrapper konten utama diberi class \"animate-antigravity\" (anak-anaknya float-up secara mandiri — cocok untuk bullet/kartu banyak item)\n   MOTION TAMBAHAN (opsional, gunakan hemat, 1 saja per slide): \"animate-line-reveal\" untuk headline (efek wipe), atau \"accent-line animate-draw-x\" untuk garis aksen. JANGAN menumpuk banyak animasi.\n\n8. WATERMARK: HANYA jika brandName tidak kosong, selipkan {{ $('Format Teks1').item.json.brandName }} sebagai teks kecil elegan di pojok (class \"editable-text\", style=\"color:var(--text-soft)\"). Jika brandName kosong (empty string): JANGAN buat watermark sama sekali — DILARANG memakai nama tema, mood tema, nomor slide, atau teks pengganti apapun. Slot watermark cukup kosong.\n\n9. ATRIBUT LAYOUT (WAJIB): tambahkan data-layout=\"LAYOUTTYPE_ASLI\" pada slide-container, isi persis dari field layoutType blueprint.\n\n10. MICRO-INTERACTION HOVER: setiap kartu/box/panel berdiri sendiri WAJIB punya class \"hover-card\".\n\n11. TANDA EDITABLE: setiap elemen berisi teks murni untuk dibaca user (headline, subheadline, paragraf, bullet, label statistik, watermark) WAJIB tambahkan class \"editable-text\". Elemen struktural (div wrapper, container flex/grid, <img>, <svg>) TIDAK boleh diberi class ini.\n\n=================================================\nBAGIAN C — STANDAR DESAIN PREMIUM (ANTI-GENERIC)\n=================================================\nTIPOGRAFI:\n1. Hierarki ukuran WAJIB KONTRAS TEGAS, TAPI body TETAP TERBACA dari jarak presentasi (proyektor/layar besar) — jangan sampai body sekecil catatan kaki. Pakai TANGGA UKURAN Tailwind ini (jangan bikin judul & narasi seukuran):\n   - Eyebrow/label kecil : text-xs, uppercase, tracking-wide (opsional)\n   - HEADLINE (cover)    : text-6xl s/d text-8xl, font-bold, leading-tight\n   - HEADLINE (slide isi): text-4xl s/d text-5xl, font-bold, leading-tight — LEBIH KECIL dari cover karena slide isi punya lebih banyak konten pendukung\n   - Sub-headline        : text-2xl s/d text-3xl, font-semibold\n   - Body / narasi       : text-lg s/d text-xl, warna var(--text-soft) — MINIMUM text-lg, DILARANG text-sm/text-base untuk paragraf/point/quote utama\n   - Keterangan kecil (caption, attribution, label chart) : text-sm diperbolehkan HANYA untuk teks sekunder ini, bukan body utama\n   - Angka KPI utama     : text-7xl s/d text-8xl, font-bold, class kpi-number\n   ATURAN MUTLAK: headline minimal ~2x lebih besar dari body (bukan 2.5x seperti sebelumnya — body sekarang lebih besar, jadi rasio lebih moderat tapi tetap tegas). DILARANG judul dan teks narasi berukuran mirip.\n2. Judul besar: tracking-tight. Label kecil / uppercase: tracking-wide.\n3. Jangan pakai kicker/eyebrow generik hanya untuk hiasan. Biarkan headline berbicara. Chip/label kecil boleh HANYA jika membawa info nyata (mis. tahap, kategori, angka slide penting).\n4. KEPADATAN vs UKURAN: kalau body text-lg/text-xl membuat konten terasa penuh, RINGKAS kontennya (lebih sedikit poin, kalimat lebih pendek) — JANGAN mengecilkan font di bawah batas minimum di atas untuk memaksa muat.\n\nWARNA & KONTRAS:\n4. Warna murni HANYA dari token tema (var(--...)). Jaga kontras: mode gelap -> teks var(--text) terang di atas var(--bg) gelap; mode terang -> teks var(--text) gelap di atas var(--bg) terang. Rasio kontras WCAG AA di kedua arah.\n5. Aksen (var(--accent)) dipakai HEMAT & SENGAJA pada 1-2 elemen kunci saja (angka utama, 1 garis, 1 ikon fokus) — bukan disebar ke semua elemen.\n5b. VARIASI WARNA TEKS (WAJIB ada variasi antar slide — DILARANG var(--text) polos di setiap slide tanpa kecuali): setiap slide pilih SATU elemen kunci untuk mendapat var(--accent) — bisa 1 kata di headline, sebuah label/chip, ikon fokus, atau garis aksen — lalu ROTASIKAN target itu antar slide (jangan selalu di kata yang sama atau posisi yang sama, dan sebagian slide boleh TANPA aksen teks sama sekali supaya tidak berlebihan). Body/paragraf/bullet tetap var(--text) atau var(--text-soft) — variasi HANYA pada elemen penekanan kecil, bukan paragraf penuh. Karena var(--accent) dan var(--accent-contrast) sudah dikurasi per tema untuk lolos WCAG AA, kombinasi ini SELALU aman dipakai — JANGAN pernah memakai warna di luar var(--text), var(--text-soft), var(--accent), var(--accent-contrast).\n6. DILARANG gradient pada TEKS (tidak ada bg-clip-text). Penekanan dari ukuran/weight/warna aksen solid, bukan gradient huruf.\n\nKOMPOSISI SPASIAL:\n7. DILARANG selalu center-center. Eksplorasi komposisi asimetris: teks condong ke satu sisi dengan white space besar, atau grid tak simetris. Tapi tetap seimbang & rapi.\n8. Breathing room: jarak antar elemen lapang (gap 6-12), jangan berhimpitan — TAPI tetap muat dalam frame (lihat ATURAN MUAT). Padding slide p-12/p-14.\n\nDEPTH & DETAIL:\n9. Shadow WAJIB punya offset + blur (kartu sudah otomatis via class \"card\"). DILARANG shadow halo tanpa offset sebagai satu-satunya kedalaman.\n10. DILARANG border kiri/kanan warna tebal (>1px) sebagai aksen. Pakai garis \"hairline\" atau border-color:var(--border) tipis.\n11. DILARANG monospace sebagai kostum \"teknis\". Mono hanya untuk angka data bila perlu.\n\n=================================================\nBAGIAN D — RENDER DATA VISUALISASI BERDASARKAN KONTEKS\n=================================================\nGunakan field visualizationKind sebagai keputusan utama. Jangan memaksakan semua bukti menjadi chart.\n\n1. visualizationKind = \"chart\"\n- chartType dan chartData sudah divalidasi sistem. WAJIB render tepat SATU canvas Chart.js.\n- Gunakan chartData KANONIK, bukan menyalin ulang data dari narasi.\n- Jangan tampilkan foto stok besar pada slide chart. Biarkan data menjadi visual utama.\n- Gunakan komposisi datar dan lapang, bukan dashboard penuh kartu.\n\nStruktur wajib:\n<div class=\"chart-wrapper relative w-full\" style=\"height:360px;\">\n  <p class=\"editable-text text-sm uppercase tracking-wide mb-3\" style=\"color:var(--text-soft)\">JUDUL CHART</p>\n  <div class=\"relative\" style=\"height:320px;\">\n    <canvas class=\"chart-canvas\" id=\"chart-SLIDE_UNIK\" role=\"img\" aria-label=\"RINGKASAN CHART\" data-chart-config='CHART_CONFIG_JSON'></canvas>\n  </div>\n</div>\n\nNilai CHART_CONFIG_JSON sudah disiapkan pada field chartConfigJson di DATA SLIDE. SALIN NILAINYA PERSIS ke data-chart-config, tanpa menyusun ulang JSON, tanpa markdown, dan tanpa menambah/menghapus karakter. Attribute tetap memakai petik tunggal di luar. chartConfigJson sudah aman untuk apostrof HTML.\n- Judul chart dan sourceNote boleh tampil sebagai teks terpisah. Jangan menulis legenda manual karena renderer menyediakannya.\n\nPemilihan komposisi:\n- bar horizontal (chartIndexAxis=\"y\"): chart 60-68% lebar, insight singkat 32-40%.\n- bar vertikal/line: chart lebar 60-70%; insight maksimal 2 poin di sisi atau bawah.\n- donut/pie: donut sekitar 52-58% lebar dengan satu insight utama di sisi. Jangan membuat kartu untuk setiap irisan.\n- radar: grafik terpusat 55-65% lebar dengan penjelasan skala yang ringkas.\n\n2. visualizationKind = \"kpi\"\n- Tampilkan 1-3 statistik dari stats sebagai angka dominan. Jangan membuat chart kosong atau satu batang.\n- Untuk counter, pakai class=\"counter-value\" dengan data-target angka mentah, serta data-prefix, data-suffix, dan data-decimals bila relevan.\n\n3. visualizationKind = \"timeline\"\n- Render items sebagai alur kronologis dengan posisi dan jarak yang jelas. Jangan mengubahnya menjadi line chart tanpa nilai numerik.\n\n4. visualizationKind = \"comparison\"\n- Render tabel/perbandingan dua sisi yang ringkas. Jangan mengubah teks kategori menjadi chart angka palsu.\n\n5. visualizationKind = \"none\"\n- Gunakan tipografi, kutipan, atau struktur teks. DILARANG membuat canvas chart.\n\nAturan kualitas:\n- Jangan mengarang angka, total, persentase, tren, atau sumber.\n- Label harus terbaca; jangan menambahkan label kecil di atas setiap titik jika membuat slide padat.\n- Satu slide hanya memiliki satu pesan visual utama. Chart dan teks insight harus menjelaskan hubungan yang sama.\n\n=================================================\nCONTOH KERANGKA (ikuti pola, JANGAN salin isinya)\n=================================================\n<div class=\"slide-container {{ $json.deckTheme.baseClass }} animate-fade-up p-12\" data-layout=\"big-stat-callout\" style=\"{{ $json.deckTheme.styleVars }}\">\n  <div class=\"slide-fit relative z-10 w-full h-full grid grid-cols-2 gap-12 items-center\">\n    <div class=\"flex flex-col justify-center\">\n      <span class=\"chip editable-text\">Pertumbuhan</span>\n      <div class=\"mt-5 flex items-baseline gap-3\">\n        <span class=\"counter-value kpi-number text-8xl font-bold\" data-target=\"128\" style=\"color:var(--accent)\">0</span>\n        <span class=\"kpi-number text-6xl font-bold\" style=\"color:var(--accent)\">%</span>\n      </div>\n      <h2 class=\"editable-text text-3xl font-semibold mt-3\" style=\"font-family:'{{ $json.deckTheme.fontHeading }}',sans-serif;color:var(--text)\">Judul singkat yang kuat</h2>\n      <div class=\"hairline border-0 my-5\" style=\"max-width:220px\"></div>\n      <p class=\"editable-text text-base line-clamp-3\" style=\"color:var(--text-soft)\">Kalimat pendukung ringkas dari materi asli — mengisi konteks, bukan mengulang judul.</p>\n    </div>\n    <div class=\"flex flex-col gap-4 justify-center\">\n      <div class=\"card hover-card p-6\"><div class=\"flex items-center gap-3\"><svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M17 7h4v4\"/></svg><span class=\"editable-text font-semibold\" style=\"color:var(--text)\">Konteks 1</span></div><p class=\"editable-text text-sm mt-2\" style=\"color:var(--text-soft)\">Detail pendukung singkat.</p></div>\n      <div class=\"card hover-card p-6\"><div class=\"flex items-center gap-3\"><svg class=\"icon\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"4\"/></svg><span class=\"editable-text font-semibold\" style=\"color:var(--text)\">Konteks 2</span></div><p class=\"editable-text text-sm mt-2\" style=\"color:var(--text-soft)\">Detail pendukung singkat.</p></div>\n    </div>\n  </div>\n  <span class=\"editable-text absolute bottom-6 right-8 text-xs\" style=\"color:var(--text-soft)\">{{ $('Format Teks1').item.json.brandName}}</span>\n</div>\n\n=================================================\nATURAN OUTPUT (SANGAT KETAT)\n=================================================\n- Jawab HANYA kode HTML diawali <div dan diakhiri </div>.\n- DILARANG tag <html>, <head>, <body>, <style>, <script> (kecuali <svg> internal untuk ikon / timeline-draw).\n- DILARANG markdown fence (```html atau ```).\n- DILARANG kata pengantar, penjelasan, atau komentar kode.\n- Jangan panggil CDN/library apapun. Cukup class Tailwind + class tema/animasi yang disebut di atas.\n\n=================================================\nOUTPUT:\n=================================================\n(Tulis kode HTML slide-container di sini)",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        688,
+        1824
+      ],
+      "name": "Slide Designer",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json || {};\nif (!data.approvedOutline || !Array.isArray(data.approvedOutline.slides) || !data.approvedOutline.slides.length) {\n  throw new Error('APPROVED_OUTLINE_REQUIRED: outline slide yang disetujui tidak tersedia.');\n}\nreturn [{ json: {\n  ...data,\n  approvedOutline: data.approvedOutline,\n  brandName: data.brandName || '',\n  targetAudience: data.targetAudience || '',\n  persona: data.persona || '',\n  outputLanguage: data.outputLanguage || 'id',\n  themeOverride: data.themeOverride || '',\n  slideCount: data.approvedOutline.slides.length,\n} }];"
+      },
+      "name": "Format Teks1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2448,
+        1936
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Sleyd Presentation Outline",
+        "formDescription": "Ketik materi atau unggah satu PDF, DOCX, atau PPTX. Anda dapat melakukan keduanya.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "material",
+              "fieldType": "textarea",
+              "placeholder": "Opsional bila Anda mengunggah PDF, DOCX, atau PPTX."
+            },
+            {
+              "fieldLabel": "Upload materi",
+              "fieldType": "file",
+              "fieldName": "sourceFile",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf,.docx,.pptx"
+            },
+            {
+              "fieldLabel": "brandName",
+              "placeholder": "Nama brand."
+            },
+            {
+              "fieldLabel": "targetAudience",
+              "placeholder": "Audiens sasaran."
+            },
+            {
+              "fieldLabel": "persona",
+              "placeholder": "Gaya komunikasi."
+            },
+            {
+              "fieldLabel": "slideCount",
+              "fieldType": "number",
+              "defaultValue": 8,
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "outputLanguage",
+              "fieldType": "dropdown",
+              "defaultValue": "id",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Indonesia"
+                  },
+                  {
+                    "option": "English"
+                  },
+                  {
+                    "option": "Arabic"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "themeOverride",
+              "placeholder": "Opsional, contoh: minimal-dark."
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Generate outline presentation",
+          "path": "presentation-outline-form"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -6096,
+        2320
+      ],
+      "name": "n8n Form1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const extractedItem = $input.first().json || {};\nconst form = $('n8n Form1').first().json || {};\nconst extracted = String(\n  extractedItem.text ?? extractedItem.extractedText ?? extractedItem.content ??\n  (typeof extractedItem.data === 'string' ? extractedItem.data : '') ?? ''\n).replace(/\\u0000/g, '').trim();\nconst typed = String(form.material || '').trim();\nconst material = [typed, extracted].filter(Boolean).join('\\n\\n--- Materi dari file ---\\n\\n');\nif (material.length < 20) {\n  throw new Error('FORM_INPUT: materi tidak ditemukan atau terlalu pendek. Isi kolom materi atau unggah file yang mengandung teks.');\n}\nconst languageMap = {\n  id: 'id', indonesia: 'id', indonesian: 'id',\n  en: 'en', english: 'en',\n  ar: 'ar', arabic: 'ar'\n};\nconst outputLanguage = languageMap[String(form.outputLanguage || 'id').trim().toLowerCase()] || 'id';\nreturn [{ json: {\n  material,\n  sourceType: extracted ? (typed ? 'text+file' : 'file') : 'text',\n  sourceFileName: extractedItem.sourceFileName || '',\n  brandName: String(form.brandName || '').trim(),\n  targetAudience: String(form.targetAudience || '').trim(),\n  persona: String(form.persona || '').trim(),\n  slideCount: Math.max(3, Math.min(20, Number(form.slideCount) || 8)),\n  outputLanguage,\n  themeOverride: String(form.themeOverride || '').trim(),\n} }];"
+      },
+      "name": "Format Teks2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4384,
+        2448
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Anda adalah Presentation Architect PersonaSlides.\n\nTugas Anda adalah membuat blueprint presentasi sebelum konten slide ditulis.\n\n=================================================\nDATA PRESENTASI\n=================================================\n\nContent Classifier:\n{{ $json.text }}\n\n=================================================\nATURAN WAJIB\n=================================================\n\n1. Jumlah slide WAJIB sama persis dengan Target:  {{ $('n8n Form1').item.json.slideCount }} slide.\n\n2. Jangan menghasilkan slide lebih sedikit atau lebih banyak dari {{ $('n8n Form1').item.json.slideCount }}.\n\n3. Setiap slide harus memiliki:\n- slideNumber\n- purpose\n- layoutType\n- importance\n\n4. layoutType TIDAK BOLEH kosong.\n\n5. Setiap slide harus memiliki purpose yang berbeda.\n\n6. Gunakan isi Materi Asli untuk menentukan alur yang paling logis.\n\n7. Setiap slide wajib memiliki animation.\n\n8. Setiap slide wajib memiliki imageRequired.\n\n9. Jika imageRequired = true,\nmaka wajib memiliki imageKeyword.\n\n10. Gunakan gaya transisi/animasi sesuai preferredAnimation\n\n11. Untuk cover slide:\n- imageRequired = true\n- gunakan hero image\n\n12. Untuk key_kpi:\n- gunakan animation = counter-up\n\n13. Untuk timeline:\n- gunakan animation = timeline-draw\n\n14. Untuk process:\n- gunakan animation = step-flow\n\n15. Untuk comparison:\n- gunakan animation = split-reveal\n\n16. Untuk slide biasa:\n- gunakan animation = fade-up\n\n17. EKSTRAKSI DATA VISUALISASI (WAJIB DICEK PER SLIDE):\nPeriksa Materi Asli untuk setiap slide. Visualisasi hanya boleh dibuat dari data yang benar-benar tertulis di materi.\n\nPilih SATU bentuk visual utama:\n- Angka tunggal atau maksimal 3 KPI terpisah -> gunakan blok stat/statChart di outline; chartType boleh \"none\".\n- Tren berurutan menurut waktu, minimal 3 titik -> chartType \"line\".\n- Perbandingan kategori, 2-8 kategori -> chartType \"bar\".\n- Komposisi bagian terhadap keseluruhan, 2-6 kategori positif -> chartType \"donut\" (pie hanya bila sangat sederhana).\n- Perbandingan 3-7 dimensi yang memakai skala sebanding -> chartType \"radar\".\n- Kronologi tanpa deret angka -> gunakan timeline di outline, chartType \"none\".\n- Perbandingan kualitatif -> gunakan comparison di outline, chartType \"none\".\n\nJika chart layak, WAJIB isi:\n{\n  \"chartType\": \"bar|line|pie|donut|radar\",\n  \"chartData\": {\n    \"title\": \"Judul grafik yang spesifik\",\n    \"labels\": [\"Label 1\", \"Label 2\"],\n    \"series\": [{\"name\": \"Nama seri\", \"values\": [10, 20]}],\n    \"unit\": \"opsional, contoh: juta pengguna\",\n    \"prefix\": \"opsional, contoh: Rp\",\n    \"suffix\": \"opsional, contoh: %\",\n    \"sourceNote\": \"opsional, hanya jika sumber tertulis di materi\"\n  }\n}\n\nKETENTUAN DATA:\n- values WAJIB angka mentah JSON, bukan string berformat. Gunakan 25, bukan \"25%\"; simpan tanda % di suffix.\n- Panjang labels WAJIB sama dengan setiap series[].values.\n- DILARANG mengarang, mengestimasi, melengkapi titik yang hilang, atau mengubah satuan.\n- Jangan memakai donut/pie jika angka bukan bagian dari satu total yang sama.\n- Jangan memakai radar jika skala antar-dimensi tidak sebanding.\n- Bila hanya ada satu angka penting, jangan memaksakan chart; arahkan ke KPI besar.\n- Bila data tidak cukup atau meragukan, WAJIB set \"chartType\":\"none\" dan \"chartData\":null.\n- Jika chart valid, prioritaskan chart dan set imageRequired=false agar foto stok tidak bersaing dengan data.\n\n=================================================\nDAFTAR PURPOSE YANG VALID\n=================================================\ncover\nexecutive_summary\nkey_kpi\nperformance_analysis\ntimeline\nopportunities\nstrategy\nroadmap\nrecommendation\nclosing\n\nproblem\nsolution\nmarket_size\nproduct\ntraction\nbusiness_model\ncompetitive_advantage\nfinancial_projection\ninvestment_ask\n\nintroduction\nconcept\nwhy_it_matters\nexample\nprocess\nexercise\nsummary\nreflection\n\n=================================================\nDAFTAR LAYOUT YANG VALID\n=================================================\n\nfull-bleed-media-split\nfloating-takeaway\nbig-stat-callout\nhairline-timeline\nab-split-matrix\nstep-by-step-path\neditorial-blockquote\nbento-box-grid\nblueprint-overlay\nsparkline-candlestick\ntarget-persona-avatar\nhero-video-loop\nlookbook-grid\npackaging-mockup-frame\n\n=================================================\nMAPPING LAYOUT YANG DISARANKAN (Pilih salah satu yang paling cocok)\n=================================================\n\ncover\n→ full-bleed-media-split\n→ blueprint-overlay\n→ bento-box-grid\n→ hero-video-loop\n\nexecutive_summary\n→ floating-takeaway\n→ editorial-blockquote\n→ bento-box-grid\n→ full-bleed-media-split\n\nkey_kpi\n→ big-stat-callout\n→ sparkline-candlestick\n→ bento-box-grid\n→ ab-split-matrix\n\ntimeline\n→ hairline-timeline\n→ step-by-step-path\n→ blueprint-overlay\n→ floating-takeaway\n\nstrategy\n→ ab-split-matrix\n→ bento-box-grid\n→ blueprint-overlay\n→ step-by-step-path\n\nroadmap\n→ step-by-step-path\n→ hairline-timeline\n→ bento-box-grid\n→ blueprint-overlay\n\nrecommendation\n→ floating-takeaway\n→ editorial-blockquote\n→ big-stat-callout\n→ ab-split-matrix\n\nclosing\n→ full-bleed-media-split\n→ floating-takeaway\n→ target-persona-avatar\n→ hero-video-loop\n\nAnimation yang valid:\n\nhero-reveal\ncounter-up\ntimeline-draw\nstep-flow\nsplit-reveal\ncards-stagger\nfade-up\n\n=================================================\nPEMILIHAN TEMA DECK (WAJIB — 1 tema untuk SELURUH deck)\n=================================================\nPilih SATU nama tema yang paling cocok dengan documentType, mood materi, dan persona.\nNilai \"deckTheme\" WAJIB salah satu PERSIS dari daftar ini:\n\n- midnight-emerald : korporat, laporan bisnis, tepercaya (gelap)\n- deep-indigo      : startup, teknologi, pitch investor (gelap)\n- carbon-amber     : berani, industrial, peluncuran produk (gelap)\n- plum-rose        : kreatif, brand, lifestyle (gelap)\n- teal-slate       : data, analitik, engineering (gelap)\n- royal-gold       : finansial, premium, eksekutif (gelap)\n- porcelain        : editorial, minimalis, bersih (terang)\n- arctic           : produk, segar, SaaS (terang)\n- sand-ink         : hangat, laporan, konsultansi (terang)\n- mint-paper       : kesehatan, edukasi, ramah (terang)\n- crimson-noir     : berani, urgensi, kampanye/olahraga/peluncuran (gelap)\n- ultraviolet      : kreatif, musik, event, tech-brand (gelap)\n- onyx-gold        : mewah, fashion, real estate, hospitality premium (gelap)\n- lilac-mist       : wellness, kecantikan, edukasi lembut (terang)\n- glacier-cobalt   : teknikal, klinis/kesehatan, data/riset terang (terang)\n- mono-noir        : monokrom gelap, editorial, fotografi, arsitektur (gelap)\n- mono-paper       : monokrom terang, editorial cetak, hukum/akademik (terang)\n- hyperspeed-dark  : teknologi, neon, cyberpunk, gaming, kecepatan tinggi (gelap)\n- molten-chrome    : metalik premium, otomotif, industrial modern, luxury tech (gelap)\n- gradient-wave    : kreatif digital, agensi, festival, musik, startup energetik (gelap)\n- liquid-aurora    : inovatif, ethereal, wellness premium, AI/tech masa depan (gelap)\n- cosmos-rings     : filosofis, visioner, space-tech, keynote besar, brand prestisius (gelap)\n- contrast-dark    : KONTRAS TINGGI/aksesibilitas, low-vision, proyektor ruang gelap (gelap)\n- contrast-light   : KONTRAS TINGGI/aksesibilitas, handout, proyektor ruang terang (terang)\n\nPanduan pemilihan:\n- Keluarkan 2-3 tema terbaik (urut dari paling cocok) di field \"deckThemes\" — BUKAN hanya 1. Sistem yang memilih salah satunya.\n- Beri variasi: jangan tiga-tiganya dari keluarga warna yang sama.\n- Tema TERANG untuk edukasi/handout/editorial yang tenang; tema GELAP untuk pitch/produk/data yang dramatis.\n- Pakai contrast-dark / contrast-light HANYA jika materi menekankan aksesibilitas/kontras tinggi, low-vision, atau presentasi proyektor.\n- Sistem tetap memakai 1 tema untuk seluruh deck (konsisten).\n\n=================================================\nOUTPUT\n=================================================\n\nJawab HANYA JSON VALID.\n\nJangan gunakan markdown.\nJangan gunakan penjelasan.\nJangan gunakan komentar.\n\nFormat:\n\n{\n  \"deckThemes\":[\"<tema-paling-cocok>\",\"<alternatif-1>\",\"<alternatif-2>\"],\n  \"slides\":[\n    {\n      \"slideNumber\":1,\n\n      \"purpose\":\"\",\n\n      \"layoutType\":\"\",\n\n      \"importance\":\"\",\n\n      \"animation\":\"\",\n\n      \"imageRequired\":true,\n\n      \"imageKeyword\":\"\",\n\n      \"chartType\":\"none\",\n\n      \"chartData\":null\n    }\n  ]\n}"
+      },
+      "name": "Blueprint Generator1",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        -3376,
+        2432
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=BAHASA OUTPUT UNTUK detectedLanguage (WAJIB): {{ $('n8n Form1').item.json.outputLanguage }}\n\nAnda adalah Content Intelligence Engine untuk sleyd.com.\nanalisa input materi berikut : {{ $json.material }}\n\npersona:\n{{ $('n8n Form1').item.json.persona }}\n\ntarget audiens:\n{{ $('n8n Form1').item.json.targetAudience }}\n\nslide count:\n{{ $('n8n Form1').item.json.slideCount }}\n\nNama Brand : {{ $('n8n Form1').item.json.brandName }}\n\nThema : {{ $('n8n Form1').item.json.themeOverride }}\n\ntentukan :\n1. documentType\nPilihan:\n- business_report\n- startup_pitch\n- training_material\n- educational_content\n- company_profile\n- product_launch\n- proposal\n- research_report\n- roadmap\n- general_presentation\n\n2. complexity\nPilihan:\n- low\n- medium\n- high\n\n3. Identifikasi apakah materi mengandung:\n\n- statistics\n- timeline\n- process\n- roadmap\n- comparison\n- quotes\n- caseStudy\n- faq\n- kpi\n- strategy\n\n4. Tentukan layout yang paling cocok.\n\nPilihan layout:\n\n- big-stat-callout\n- sparkline-candlestick\n- ab-split-matrix\n- hairline-timeline\n- blueprint-overlay\n- floating-takeaway\n- bento-box-grid\n- target-persona-avatar\n- hero-video-loop\n- lookbook-grid\n- full-bleed-media-split\n- packaging-mockup-frame\n- editorial-blockquote\n- step-by-step-path\n\n5. Analisis kebutuhan visual presentasi.\n\nTentukan:\n\nvisualIntent — array berisi maksimal 5 keyword visual utama yang mewakili materi.\nContoh isi: \"technology\", \"quantum\", \"future\". Atau: \"marketing\", \"growth\", \"digital\". Atau: \"education\", \"science\", \"research\".\n\n------------------------------------------------\n\nimageKeywords — array of string berisi keyword bahasa Inggris untuk pencarian stock photo di Pexels. Maksimal 3 kata per keyword.\nContoh isi: \"growth mindset\", \"business resilience\", \"leadership team\".\n\n------------------------------------------------\n\npreferredAnimation — pilih salah satu string:\nhero-reveal, counter-up, timeline-draw, step-flow, split-reveal, cards-stagger, fade-up\n\nAturan pemilihan:\nJika banyak statistik → counter-up\nJika timeline → timeline-draw\nJika process → step-flow\nJika comparison → split-reveal\nJika educational → fade-up\nJika startup pitch → hero-reveal\n\n------------------------------------------------\n\nvisualDensity — pilih salah satu string: low, medium, atau high.\n\nAturan pemilihan:\nMateri sedikit → low\nMateri normal → medium\nMateri teknis atau data-heavy → high\n\n------------------------------------------------\n\nslideVisualHints — array of object. Setiap object berisi dua field: purpose (string) dan imageKeyword (string). Contoh isi array (dijelaskan sebagai daftar pasangan): pasangan pertama purpose \"cover\" dengan imageKeyword \"coffee shop\"; pasangan kedua purpose \"product\" dengan imageKeyword \"organic coffee beans\"; pasangan ketiga purpose \"key_kpi\" dengan imageKeyword \"business growth chart\".\n\n------------------------------------------------\n\nrequiresHeroImage — boolean. true jika cover membutuhkan visual utama, false jika presentasi murni teks.\n\n\nJawab HANYA dengan objek JSON valid — tanpa markdown, tanpa blok kode, tanpa komentar. Objek JSON WAJIB berisi field berikut dengan tipe yang benar:\n\n- documentType (string) — salah satu dari pilihan documentType di atas\n- detectedLanguage (string) — nama bahasa mayoritas (contoh: Indonesian, English)\n- complexity (string) — salah satu dari low, medium, high\n- containsStatistics (boolean)\n- containsTimeline (boolean)\n- containsProcess (boolean)\n- containsRoadmap (boolean)\n- containsComparison (boolean)\n- containsQuotes (boolean)\n- containsCaseStudy (boolean)\n- containsFAQ (boolean)\n- containsKPI (boolean)\n- containsStrategy (boolean)\n- recommendedLayouts (array of string) — daftar layout dari pilihan di atas\n- visualIntent (array of string, maksimal 5)\n- imageKeywords (array of string, maksimal 3 kata per elemen)\n- preferredAnimation (string) — salah satu dari pilihan animation di atas\n- visualDensity (string) — low, medium, atau high\n- requiresHeroImage (boolean)",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -3824,
+        2448
+      ],
+      "name": "Content Classifier1",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-nano",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-nano"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 10000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -3360,
+        2752
+      ],
+      "name": "OpenAI Chat Model3"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-nano",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-nano"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 10000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -3632,
+        2784
+      ],
+      "name": "OpenAI Chat Model4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== INPUT SANITIZER — Anti Prompt Injection =====\nconst item = $input.first().json || {};\nconst material = String(item.material || '');\nconst technicalPatterns = [\n  /webhookId/i, /x-real-ip/i, /user-agent/i, /\"headers\"\\s*:/i,\n  /authorization:\\s*bearer/i, /api[_-]?key\\s*[:=]/i,\n  /access[_-]?token\\s*[:=]/i, /\"typeVersion\"/i,\n  /\"nodeGroups\"/i, /-----BEGIN .* KEY-----/i\n];\nfor (const pattern of technicalPatterns) {\n  if (pattern.test(material)) throw new Error('REJECTED: materi terdeteksi sebagai data teknis/sistem, bukan konten presentasi.');\n}\nlet sanitized = material\n  .replace(/ignore\\s+(all\\s+)?(previous|above|prior)\\s+instructions?/gi, '[DIHAPUS]')\n  .replace(/you\\s+are\\s+now\\s+(a\\s+)?/gi, '[DIHAPUS] ')\n  .replace(/forget\\s+(everything|all)\\s+(you|above)/gi, '[DIHAPUS]')\n  .replace(/system\\s*:\\s*/gi, '[DIHAPUS]: ')\n  .replace(/\\[INST\\]|\\[\\/INST\\]|<\\|system\\|>|<\\|user\\|>|<\\|assistant\\|>/gi, '[DIHAPUS]')\n  .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, '')\n  .trim();\nconst MAX_CHARS = 60000;\nif (sanitized.length > MAX_CHARS) sanitized = sanitized.slice(0, MAX_CHARS) + '\\n\\n[... materi dipotong karena melebihi batas]';\nif (sanitized.length < 20) throw new Error('REJECTED: materi terlalu pendek untuk diproses.');\nsanitized = sanitized.replace(/\\{/g, '{{').replace(/\\}/g, '}}');\nreturn [{ json: { ...item, material: sanitized } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4032,
+        2128
+      ],
+      "name": "Input Sanitizer2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Anda adalah Outline Writer untuk Sleyd AI.\n\nTugas Anda: menulis KERANGKA (outline) presentasi BERBASIS BLOK berdasarkan Blueprint dan Materi Asli. HANYA konten terstruktur (judul, sub-judul, dan blok-blok isi) — TIDAK menulis HTML atau slide final. Konten singkat, tajam, siap direview & diedit user.\n\n=================================================\nINPUT\n=================================================\n\nMateri asli:\n{{ $('Input Sanitizer2').item.json.material }}\n\nPersona penulis:\n{{ $('n8n Form1').item.json.persona }}\n\nTarget audiens:\n{{ $('n8n Form1').item.json.targetAudience }}\n\nWatermark brand/individu:\n{{ $('n8n Form1').item.json.brandName }}\n\nBlueprint slide (struktur wajib diikuti):\n{{ $json.text }}\n\n=================================================\nATURAN\n=================================================\n\n1. Jumlah slide di output = jumlah slide di Blueprint. Urutan slide = slideNumber Blueprint.\n2. Setiap slide punya:\n   - `n` (integer mulai 1)\n   - `layoutType` (SALIN dari Blueprint)\n   - `purpose` (SALIN)\n   - `title` (3–8 kata, tajam, dalam BAHASA OUTPUT)\n   - `subtitle` (opsional, boleh \"\")\n   - `highlightWords` (1-3 kata kunci paling penting dalam title untuk penekanan aksen visual 10%)\n   - `imageRequired` (boolean, true jika layout membutuhkan visual gambar/foto)\n   - `imageKeyword` (SALIN dari Blueprint jika ada, TETAP Bahasa Inggris, maks 3 kata)\n   - `blocks` (array blok isi)\n3. `blocks` adalah array BERURUTAN. Tiap blok WAJIB punya field `kind` dan field sesuai jenisnya. Jenis yang tersedia:\n   - {\"kind\":\"point\",\"text\":\"...\",\"note\":\"...(opsional: narasi singkat 1 kalimat)\"}\n   - {\"kind\":\"paragraph\",\"text\":\"...(1–2 kalimat)\"}\n   - {\"kind\":\"quote\",\"text\":\"...\",\"attribution\":\"...\"}\n   - {\"kind\":\"stat\",\"value\":\"78%\",\"label\":\"...\",\"delta\":\"+12% (opsional)\"}\n   - {\"kind\":\"chart\",\"chartType\":\"bar|line|pie|donut|radar\",\"data\":{\"title\":\"...\",\"labels\":[\"A\",\"B\"],\"series\":[{\"name\":\"...\",\"values\":[10,20]}],\"unit\":\"\",\"prefix\":\"\",\"suffix\":\"\",\"sourceNote\":\"\"},\"caption\":\"...(opsional)\"}\n   - {\"kind\":\"statChart\",\"stats\":[{\"value\":\"\",\"label\":\"\",\"delta\":\"\"}],\"chartType\":\"bar|line|pie|donut|radar\",\"data\":{\"title\":\"...\",\"labels\":[],\"series\":[{\"name\":\"\",\"values\":[]}],\"unit\":\"\",\"prefix\":\"\",\"suffix\":\"\",\"sourceNote\":\"\"},\"caption\":\"...\"}\n   - {\"kind\":\"timeline\",\"items\":[{\"time\":\"\",\"label\":\"\",\"text\":\"...(opsional)\"}]}\n   - {\"kind\":\"comparison\",\"columns\":[\"Kol A\",\"Kol B\"],\"rows\":[{\"label\":\"\",\"cells\":[\"\",\"\"]}]}\n   - {\"kind\":\"imageCaption\",\"imageKeyword\":\"english keyword\",\"caption\":\"...\"}\n   - {\"kind\":\"iconList\",\"items\":[{\"icon\":\"(opsional)\",\"text\":\"\"}]}\n4. PILIH bentuk bukti yang PALING SESUAI:\n   - 1-3 angka mandiri -> stat. Jangan membuat chart satu batang.\n   - Tren waktu dengan minimal 3 titik -> line.\n   - Perbandingan 2-8 kategori -> bar.\n   - Komposisi satu total dengan 2-6 bagian positif -> donut/pie.\n   - 3-7 dimensi pada skala yang sama -> radar.\n   - Kronologi tanpa deret angka -> timeline.\n   - Perbandingan kualitatif -> comparison.\n   - Narasi tanpa data -> point/paragraph.\n5. Jika Blueprint memiliki chartData valid, salin data itu ke blok chart/statChart yang relevan. Jangan mengubah angka atau satuannya.\n6. STRICT GROUNDING: JANGAN mengarang angka, tahun, nama, sumber, atau kutipan. Bila data tidak cukup, gunakan blok naratif; jangan membuat chart kosong atau angka perkiraan.\n7. Pada chart, gunakan HANYA series[].values berisi angka JSON mentah. Panjang labels harus sama dengan setiap values. unit/prefix/suffix disimpan terpisah dari angka.\n8. Batasi keterbacaan: bar maksimal 8 label, line maksimal 12 titik, donut/pie maksimal 6 bagian, radar 3-7 dimensi. Jika sumber lebih panjang, pilih rentang yang paling relevan tanpa mengubah nilainya dan jelaskan cakupan pada caption.\n9. Jangan pasangkan chart dengan foto stok besar. Bila chart valid, set imageRequired=false kecuali gambar adalah bukti yang memang diminta materi.\n10. 2-5 blok per slide (kecuali cover). Ringkas: point maksimal 14 kata; paragraph maksimal 2 kalimat. Nada mengikuti persona dan hindari pengulangan judul.\n\n=================================================\nOUTPUT\n=================================================\n\nJawab HANYA JSON VALID. Jangan gunakan markdown, komentar, atau penjelasan.\n\nFormat:\n{\n  \"deckThemes\": <SALIN array deckThemes dari Blueprint>,\n  \"slides\": [\n    {\n      \"n\": 1,\n      \"layoutType\": \"\",\n      \"purpose\": \"\",\n      \"title\": \"\",\n      \"subtitle\": \"\",\n      \"imageKeyword\": \"\",\n      \"blocks\": [\n        {\"kind\": \"point\", \"text\": \"\"}\n      ]\n    }\n  ]\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -3024,
+        2432
+      ],
+      "name": "Outline Writer1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== ROBUST JSON CLEANER & PARSER =====\nlet raw = $input.first().json.text || \"\";\n\n// 1. Strip markdown code fences if wrapped\nraw = raw.trim();\nconst fenceMatch = raw.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);\nif (fenceMatch) {\n    raw = fenceMatch[1].trim();\n} else {\n    raw = raw.replace(/^```(?:json)?\\s*/i, \"\").replace(/\\s*```$/i, \"\").trim();\n}\n\n// 2. Normalisasi smart quotes dan whitespace kontrol\nraw = raw\n    .replace(/[\\u201C\\u201D]/g, '\"')\n    .replace(/[\\u2018\\u2019]/g, \"'\")\n    .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g, \"\");\n\n// 3. Bersihkan trailing commas sebelum bracket/brace penutup\nraw = raw.replace(/,\\s*([\\}\\]])/g, '$1');\n\nfunction tryParse(str) {\n    try {\n        return JSON.parse(str);\n    } catch (e) {\n        return null;\n    }\n}\n\nlet parsed = tryParse(raw);\n\nif (!parsed) {\n    // Coba ekstrak substring JSON objek terluar\n    const firstBrace = raw.indexOf('{');\n    const lastBrace = raw.lastIndexOf('}');\n    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {\n        const candidate = raw.slice(firstBrace, lastBrace + 1);\n        parsed = tryParse(candidate);\n        if (!parsed) {\n            // Bersihkan trailing commas lagi pada kandidat\n            const cleanedCandidate = candidate.replace(/,\\s*([\\}\\]])/g, '$1');\n            parsed = tryParse(cleanedCandidate);\n        }\n    }\n}\n\nif (!parsed || !parsed.slides || !Array.isArray(parsed.slides)) {\n    throw new Error(\"Gagal mengurai outline presentasi menjadi JSON terstruktur yang valid. Output AI: \" + raw.slice(0, 300));\n}\n\nreturn [{ json: parsed }];"
+      },
+      "name": "Parse JSON1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2688,
+        2432
+      ]
+    },
+    {
+      "parameters": {
+        "defineForm": "json",
+        "jsonOutput": "={{ JSON.stringify([\n      ...$json.slides.flatMap((slide, i) => {\n        const blockText = (slide.blocks || []).map((block) => {\n          if (block.kind === 'stat') return [block.value, block.label].filter(Boolean).join(' — ');\n          if (block.kind === 'timeline') return (block.items || []).map((item) => [item.time, item.label, item.text].filter(Boolean).join(' — ')).join('\\n');\n          if (block.kind === 'comparison') return (block.rows || []).map((row) => [row.label, ...(row.cells || [])].filter(Boolean).join(' — ')).join('\\n');\n          return block.text || block.caption || (block.items || []).map((item) => item.text || item.label).filter(Boolean).join(' • ');\n        }).filter(Boolean).join('\\n');\n        return [\n          { fieldLabel: '<hr><h2>Slide ' + (i + 1) + '</h2><p>' + (slide.purpose || 'Konten') + '</p>', fieldType: 'html', elementName: 'slide_' + i + '_heading', html: '<hr><h2>Slide ' + (i + 1) + '</h2><p>' + (slide.purpose || 'Konten') + '</p>' },\n          { fieldLabel: 'Judul slide', fieldType: 'text', requiredField: true, defaultValue: slide.title || '', fieldName: 'slide_' + i + '_title' },\n          { fieldLabel: 'Subjudul', fieldType: 'text', defaultValue: slide.subtitle || '', fieldName: 'slide_' + i + '_subtitle' },\n          { fieldLabel: 'Isi slide', fieldType: 'textarea', requiredField: i !== 0, defaultValue: blockText, fieldName: 'slide_' + i + '_content' },\n          { fieldLabel: 'Kata kunci gambar (Inggris, opsional)', fieldType: 'text', defaultValue: slide.imageKeyword || '', fieldName: 'slide_' + i + '_imageKeyword' }\n        ];\n      }),\n      { fieldLabel: 'Persetujuan', fieldType: 'checkbox', requiredField: true, fieldOptions: { values: [{ option: 'Saya menyetujui outline ini dan ingin membuat presentasi.' }] }, fieldName: 'outlineApproved' }\n    ]) }}",
+        "options": {
+          "formTitle": "Review Outline Presentasi",
+          "formDescription": "Periksa dan edit setiap slide sebelum presentasi dibuat.",
+          "buttonLabel": "Setujui & buat presentasi"
+        }
+      },
+      "name": "Review Outline per Slide",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        -2432,
+        2432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const submitted = $input.first().json || {};\nconst approval = submitted.outlineApproved;\nconst isApproved = Array.isArray(approval) ? approval.length > 0 : Boolean(approval);\nif (!isApproved) throw new Error('OUTLINE_NOT_APPROVED: centang persetujuan untuk melanjutkan.');\nconst outline = JSON.parse(JSON.stringify($('Parse JSON1').first().json));\nconst input = $('Input Sanitizer2').first().json;\nfunction originalText(slide) {\n  return (slide.blocks || []).map((block) => {\n    if (block.kind === 'stat') return [block.value, block.label].filter(Boolean).join(' — ');\n    if (block.kind === 'timeline') return (block.items || []).map((item) => [item.time, item.label, item.text].filter(Boolean).join(' — ')).join('\\n');\n    if (block.kind === 'comparison') return (block.rows || []).map((row) => [row.label, ...(row.cells || [])].filter(Boolean).join(' — ')).join('\\n');\n    return block.text || block.caption || (block.items || []).map((item) => item.text || item.label).filter(Boolean).join(' • ');\n  }).filter(Boolean).join('\\n');\n}\noutline.slides = outline.slides.map((slide, i) => {\n  const title = String(submitted['slide_' + i + '_title'] || '').trim();\n  const subtitle = String(submitted['slide_' + i + '_subtitle'] || '').trim();\n  const content = String(submitted['slide_' + i + '_content'] || '').trim();\n  const imageKeyword = String(submitted['slide_' + i + '_imageKeyword'] || '').trim();\n  if (!title) throw new Error('OUTLINE_INVALID: judul slide ' + (i + 1) + ' wajib diisi.');\n  if (i > 0 && !content) throw new Error('OUTLINE_INVALID: isi slide ' + (i + 1) + ' wajib diisi.');\n  if (content !== originalText(slide)) {\n    slide.blocks = content.split(/\\r?\\n/).map((text) => text.trim()).filter(Boolean).map((text) => ({ kind: 'point', text }));\n  }\n  return {\n    ...slide,\n    n: Number(slide.n) || i + 1,\n    title,\n    subtitle,\n    imageKeyword,\n    imageRequired: Boolean(imageKeyword),\n  };\n});\nreturn [{ json: { ...input, approvedOutline: outline, approvedAt: new Date().toISOString() } }];"
+      },
+      "name": "Apply Slide Edits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2672,
+        1952
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst file = item.binary?.sourceFile;\nconst typed = String(item.json?.material || '').trim();\nif (!file && !typed) throw new Error('FORM_INPUT: isi materi atau unggah satu file PDF, DOCX, atau PPTX.');\nif (file) {\n  const name = String(file.fileName || '').toLowerCase();\n  const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : '';\n  if (!['pdf', 'docx', 'pptx'].includes(extension)) throw new Error('FILE_TYPE: hanya PDF, DOCX, dan PPTX yang diterima.');\n  return [{ json: { ...item.json, sourceFileName: file.fileName || '', sourceExtension: extension, hasUpload: true }, binary: item.binary }];\n}\nreturn [{ json: { ...item.json, hasUpload: false }, binary: item.binary }];"
+      },
+      "name": "Validate Uploaded Material",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5600,
+        2336
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.sourceExtension }}",
+                    "rightValue": "pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a016102b-2780-4fe5-a334-f1d03c73db49"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.sourceExtension }}",
+                    "rightValue": "docx",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "06cae9a4-14b9-4f47-b8d9-b0cbf3da8aa8"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.sourceExtension }}",
+                    "rightValue": "pptx",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "8d0dcc65-2fc4-4480-b3f2-a0882937c4cb"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "name": "Route Uploaded File",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -5296,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "sourceFile",
+        "options": {}
+      },
+      "name": "Extract PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4784,
+        1904
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "docx"
+      },
+      "name": "Extract DOCX",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4784,
+        2128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pptx"
+      },
+      "name": "Extract PPTX",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4816,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== NORMALIZE VISUALIZATION DATA =====\n// Menyatukan schema chart dari blueprint/outline dan menolak chart yang tidak layak.\n\nfunction toNumber(value) {\n  if (typeof value === 'number') return Number.isFinite(value) ? value : null;\n  if (typeof value !== 'string') return null;\n  let raw = value.trim().replace(/\\s/g, '').replace(/[^0-9,.-]/g, '');\n  if (!raw || raw === '-' || raw === ',' || raw === '.') return null;\n  const comma = raw.lastIndexOf(',');\n  const dot = raw.lastIndexOf('.');\n  if (comma >= 0 && dot >= 0) {\n    if (comma > dot) raw = raw.replace(/\\./g, '').replace(',', '.');\n    else raw = raw.replace(/,/g, '');\n  } else if (comma >= 0) {\n    const decimalDigits = raw.length - comma - 1;\n    raw = decimalDigits > 0 && decimalDigits <= 2 ? raw.replace(',', '.') : raw.replace(/,/g, '');\n  }\n  const parsed = Number(raw);\n  return Number.isFinite(parsed) ? parsed : null;\n}\n\nfunction normalizeStats(blocks) {\n  const stats = [];\n  blocks.forEach(function (block) {\n    if (!block) return;\n    if (block.kind === 'stat') stats.push({ value: block.value, label: block.label || '', delta: block.delta || '' });\n    if (block.kind === 'statChart' && Array.isArray(block.stats)) {\n      block.stats.forEach(function (stat) {\n        if (stat && stat.value !== undefined) stats.push({ value: stat.value, label: stat.label || '', delta: stat.delta || '' });\n      });\n    }\n  });\n  return stats.slice(0, 3);\n}\n\nfunction looksLikeTime(labels) {\n  if (labels.length < 3) return false;\n  const timePattern = /(?:^|\\b)(?:19|20)\\d{2}(?:\\b|$)|\\bQ[1-4]\\b|\\b(?:jan|feb|mar|apr|mei|may|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)\\b/i;\n  return labels.filter(function (label) { return timePattern.test(String(label)); }).length >= Math.ceil(labels.length * 0.6);\n}\n\nfunction canonicalChart(rawData, requestedType, caption) {\n  if (!rawData || !Array.isArray(rawData.labels) || !Array.isArray(rawData.series)) return null;\n  let labels = rawData.labels.map(function (label) { return String(label == null ? '' : label).trim(); });\n  let series = rawData.series.map(function (entry, index) {\n    const sourceValues = Array.isArray(entry && entry.values) ? entry.values : (Array.isArray(entry && entry.data) ? entry.data : []);\n    return {\n      name: String((entry && entry.name) || ('Seri ' + (index + 1))),\n      values: sourceValues.map(toNumber)\n    };\n  }).filter(function (entry) { return entry.values.length > 0; });\n  if (labels.length < 2 || series.length === 0) return null;\n\n  const commonLength = Math.min.apply(null, [labels.length].concat(series.map(function (entry) { return entry.values.length; })));\n  labels = labels.slice(0, commonLength);\n  series = series.map(function (entry) { return { name: entry.name, values: entry.values.slice(0, commonLength) }; });\n\n  const keep = labels.map(function (_, index) { return series.some(function (entry) { return Number.isFinite(entry.values[index]); }); });\n  labels = labels.filter(function (_, index) { return keep[index]; });\n  series = series.map(function (entry) { return { name: entry.name, values: entry.values.filter(function (_, index) { return keep[index]; }) }; });\n  if (labels.length < 2 || series.every(function (entry) { return entry.values.filter(Number.isFinite).length < 2; })) return null;\n\n  let type = String(requestedType || '').toLowerCase();\n  if (type === 'doughnut') type = 'donut';\n  if (type === 'area') type = 'line';\n  if (!['bar', 'line', 'pie', 'donut', 'radar'].includes(type)) {\n    const firstValues = series[0].values.filter(Number.isFinite);\n    const total = firstValues.reduce(function (sum, value) { return sum + value; }, 0);\n    const isComposition = series.length === 1 && firstValues.every(function (value) { return value >= 0; }) && total > 0 && Math.abs(total - 100) <= 2;\n    type = looksLikeTime(labels) ? 'line' : (isComposition && labels.length <= 6 ? 'donut' : 'bar');\n  }\n\n  const limits = { bar: 8, line: 12, pie: 6, donut: 6, radar: 7 };\n  const limit = limits[type] || 8;\n  labels = labels.slice(0, limit);\n  series = series.map(function (entry) { return { name: entry.name, values: entry.values.slice(0, limit) }; });\n\n  if (type === 'line' && labels.length < 3) type = 'bar';\n  if (type === 'radar' && labels.length < 3) type = 'bar';\n  if (type === 'pie' || type === 'donut') {\n    series = [series[0]];\n    const values = series[0].values;\n    if (values.some(function (value) { return !Number.isFinite(value) || value < 0; }) || values.reduce(function (sum, value) { return sum + value; }, 0) <= 0) type = 'bar';\n  }\n\n  const averageLabelLength = labels.reduce(function (sum, label) { return sum + label.length; }, 0) / labels.length;\n  return {\n    type: type,\n    data: {\n      title: String(rawData.title || caption || ''),\n      labels: labels,\n      series: series,\n      unit: String(rawData.unit || ''),\n      prefix: String(rawData.prefix || ''),\n      suffix: String(rawData.suffix || ''),\n      sourceNote: String(rawData.sourceNote || '')\n    },\n    indexAxis: type === 'bar' && (averageLabelLength > 14 || labels.length > 6) ? 'y' : 'x'\n  };\n}\n\nreturn $input.all().map(function (item) {\n  const slide = item.json || {};\n  const blocks = Array.isArray(slide.approvedBlocks) ? slide.approvedBlocks : [];\n  const chartBlock = blocks.find(function (block) { return block && (block.kind === 'chart' || block.kind === 'statChart'); });\n  const rawData = (chartBlock && chartBlock.data) || slide.chartData || null;\n  const requestedType = (chartBlock && chartBlock.chartType) || slide.chartType || 'none';\n  const normalized = canonicalChart(rawData, requestedType, chartBlock && chartBlock.caption);\n  const stats = normalizeStats(blocks);\n  const hasTimeline = blocks.some(function (block) { return block && block.kind === 'timeline' && Array.isArray(block.items) && block.items.length > 0; });\n  const hasComparison = blocks.some(function (block) { return block && block.kind === 'comparison' && Array.isArray(block.rows) && block.rows.length > 0; });\n  const visualizationKind = normalized ? 'chart' : (stats.length ? 'kpi' : (hasTimeline ? 'timeline' : (hasComparison ? 'comparison' : 'none')));\n  const chartConfigJson = normalized ? JSON.stringify(Object.assign({ type: normalized.type, indexAxis: normalized.indexAxis }, normalized.data)).replace(/'/g, '&#39;') : '';\n\n  return { json: Object.assign({}, slide, {\n    visualizationKind: visualizationKind,\n    chartType: normalized ? normalized.type : 'none',\n    chartData: normalized ? normalized.data : null,\n    chartIndexAxis: normalized ? normalized.indexAxis : 'x',\n    chartConfigJson: chartConfigJson,\n    stats: stats,\n    imageRequired: normalized && !slide.imageUrl ? false : slide.imageRequired,\n    visualizationReason: normalized ? 'Data numerik valid dan selaras dengan label.' : (requestedType !== 'none' ? 'Chart dilewati karena data tidak lengkap atau tidak numerik.' : '')\n  }) };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        1648
+      ],
+      "name": "Normalize Visualization Data"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-5.6-luna"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -3024,
+        2672
+      ],
+      "name": "OpenAI Chat Model"
+    }
+  ],
+  "connections": {
+    "n8n Form1": {
+      "main": [
+        [
+          {
+            "node": "Validate Uploaded Material",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Uploaded Material": {
+      "main": [
+        [
+          {
+            "node": "Route Uploaded File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Uploaded File": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract DOCX",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract PPTX",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Teks2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF": {
+      "main": [
+        [
+          {
+            "node": "Format Teks2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract DOCX": {
+      "main": [
+        [
+          {
+            "node": "Format Teks2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PPTX": {
+      "main": [
+        [
+          {
+            "node": "Format Teks2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Teks2": {
+      "main": [
+        [
+          {
+            "node": "Input Sanitizer2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Sanitizer2": {
+      "main": [
+        [
+          {
+            "node": "Content Classifier1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Classifier1": {
+      "main": [
+        [
+          {
+            "node": "Blueprint Generator1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Content Classifier1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blueprint Generator1": {
+      "main": [
+        [
+          {
+            "node": "Outline Writer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Blueprint Generator1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outline Writer1": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON1": {
+      "main": [
+        [
+          {
+            "node": "Review Outline per Slide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Outline per Slide": {
+      "main": [
+        [
+          {
+            "node": "Apply Slide Edits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Slide Edits": {
+      "main": [
+        [
+          {
+            "node": "Format Teks1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Teks1": {
+      "main": [
+        [
+          {
+            "node": "Split Slide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Slide": {
+      "main": [
+        [
+          {
+            "node": "Normalize Visualization Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Fetch Image Pexels",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Slide Designer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Image Pexels": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Merge Image URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Image URL": {
+      "main": [
+        [
+          {
+            "node": "Slide Designer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Slide Designer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slide Designer": {
+      "main": [
+        [
+          {
+            "node": "Sanitize HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize HTML": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Final Merger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Merger": {
+      "main": [
+        [
+          {
+            "node": "Generate Slug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Slug": {
+      "main": [
+        [
+          {
+            "node": "Vercel Deploy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vercel Deploy": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Vercel Alias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vercel Alias": {
+      "main": [
+        [
+          {
+            "node": "Form Ending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Visualization Data": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Outline Writer1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "active": false
+}
