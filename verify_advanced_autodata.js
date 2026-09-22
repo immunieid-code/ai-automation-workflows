@@ -88,11 +88,18 @@ async function main() {
   assert.equal(chi.advancedAnalysis.results[0].test, 'Chi-square independence');
   assert(chi.advancedAnalysis.results[0].pValue < .001);
 
+  const invalidTarget = await run('Plan Advanced Analysis', { ...value,
+    meta: { ...value.meta, analysisMode: 'regression', targetColumn: 'does_not_exist' } });
+  assert(invalidTarget.advancedAnalysis.skipped.some((s) => s.method === 'regression'));
+  const meanPlan = await run('Plan Advanced Analysis', { ...value,
+    meta: { ...value.meta, analysisMode: 'forecast', targetColumn: 'sales', forecastAggregation: 'mean' } });
+  assert.equal(meanPlan.analysisPlan.forecastAggregation, 'mean');
+
   let small = { ...value, cleanedRows: rows.slice(0, 3), advancedAnalysis: undefined, analysisPlan: undefined,
     meta: { ...value.meta, analysisMode: 'regression' } };
   for (const stage of stages) small = await run(stage, small);
   assert.equal(small.advancedAnalysis.results.length, 0);
   assert(small.advancedAnalysis.skipped.some((s) => s.method === 'regression'));
-  console.log('PASS: Code nodes parse; five methods, three hypothesis tests, fallback, prompt, deck and notebook verified');
+  console.log('PASS: Code nodes parse; five methods, three hypothesis tests, column checks, fallback, prompt, deck and notebook verified');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

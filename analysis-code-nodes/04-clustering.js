@@ -1,8 +1,7 @@
 const input = $input.first().json;
 const plan = input.analysisPlan;
 if (!plan.selected.includes('clustering')) return [{ json: input }];
-const features = plan.numeric.filter((c) => c !== plan.target).slice(0, 5);
-if (features.length < 2) features.push(...plan.numeric.filter((c) => !features.includes(c)).slice(0, 2 - features.length));
+const features = plan.clusterFeatures.slice(0, 5);
 const complete = input.cleanedRows.filter((r) => features.every((f) => Number.isFinite(r[f])));
 if (complete.length < 20) {
   input.advancedAnalysis.skipped.push({ method: 'clustering', reason: 'Fewer than 20 complete rows across selected numeric features.' });

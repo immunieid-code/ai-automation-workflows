@@ -32,8 +32,44 @@ def add_form_field(fields, label, **kwargs):
         fields.append({"fieldLabel": label, **kwargs})
 
 
+def augment_input(data):
+    fields = find(data, "Form Input Data")["parameters"]["formFields"]["values"]
+    add_form_field(fields, "Analysis Mode", fieldType="dropdown", defaultValue="auto",
+        fieldOptions={"values": [{"option": x} for x in ["auto", "descriptive", "regression", "forecast", "clustering", "hypothesis", "exploratory"]]})
+    add_form_field(fields, "Target Column", placeholder="Exact numeric column name, if needed")
+    add_form_field(fields, "Time Column", placeholder="Exact date column name, if needed")
+    add_form_field(fields, "Group Column", placeholder="Exact category column name, if needed")
+    add_form_field(fields, "Forecast Horizon (months)", placeholder="1–12; default 3")
+    add_form_field(fields, "Forecast Aggregation", fieldType="dropdown", defaultValue="auto",
+        fieldOptions={"values": [{"option": x} for x in ["auto", "sum", "mean"]]})
+    add_form_field(fields, "Predictor Columns", placeholder="Optional exact names, separated by commas")
+    add_form_field(fields, "Cluster Features", placeholder="Optional exact names, separated by commas")
+
+    detector_node = find(data, "Susun & Deteksi Input")
+    detector = detector_node["parameters"]["jsCode"]
+    detector = detector.replace("raw['Bahasa Output'] === 'en' ? 'en' : 'id'", "/^(en|english)$/i.test(String(raw['Bahasa Output'] || '')) ? 'en' : 'id'")
+    if "const analysisMode =" not in detector:
+        detector = detector.replace("const outputLanguage = /^(en|english)$/i.test(String(raw['Bahasa Output'] || '')) ? 'en' : 'id';",
+            "const outputLanguage = /^(en|english)$/i.test(String(raw['Bahasa Output'] || '')) ? 'en' : 'id';\n"
+            "  const analysisMode = text(raw['Analysis Mode'], 30).toLowerCase() || 'auto';\n"
+            "  const targetColumn = text(raw['Target Column'], 180);\n"
+            "  const timeColumn = text(raw['Time Column'], 180);\n"
+            "  const groupColumn = text(raw['Group Column'], 180);\n"
+            "  const forecastHorizon = Number(raw['Forecast Horizon (months)']) || 3;")
+        detector = detector.replace("outputLanguage,\n      defaultMode", "outputLanguage, analysisMode, targetColumn, timeColumn, groupColumn, forecastHorizon,\n      defaultMode")
+    if "const forecastAggregation =" not in detector:
+        detector = detector.replace("const forecastHorizon = Number(raw['Forecast Horizon (months)']) || 3;",
+            "const forecastHorizon = Number(raw['Forecast Horizon (months)']) || 3;\n"
+            "  const forecastAggregation = text(raw['Forecast Aggregation'], 10).toLowerCase() || 'auto';\n"
+            "  const predictorColumns = text(raw['Predictor Columns'], 1000);\n"
+            "  const clusterFeatures = text(raw['Cluster Features'], 1000);")
+        detector = detector.replace("forecastHorizon,\n      defaultMode", "forecastHorizon, forecastAggregation, predictorColumns, clusterFeatures,\n      defaultMode")
+    detector_node["parameters"]["jsCode"] = detector
+
+
 def main():
     data = json.loads(PRIVATE.read_text(encoding="utf-8"))
+    augment_input(data)
     if any(n["name"] == NODE_FILES[0][0] for n in data["nodes"]):
         for name, filename in NODE_FILES:
             find(data, name)["parameters"]["jsCode"] = (CODE / filename).read_text(encoding="utf-8")
@@ -53,25 +89,6 @@ def main():
         PRIVATE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print("Refreshed seven advanced Code nodes")
         return
-
-    fields = find(data, "Form Input Data")["parameters"]["formFields"]["values"]
-    add_form_field(fields, "Analysis Mode", fieldType="dropdown", defaultValue="auto",
-        fieldOptions={"values": [{"option": x} for x in ["auto", "descriptive", "regression", "forecast", "clustering", "hypothesis", "exploratory"]]})
-    add_form_field(fields, "Target Column", placeholder="Exact numeric column name, if needed")
-    add_form_field(fields, "Time Column", placeholder="Exact date column name, if needed")
-    add_form_field(fields, "Group Column", placeholder="Exact category column name, if needed")
-    add_form_field(fields, "Forecast Horizon (months)", placeholder="1–12; default 3")
-
-    detector = find(data, "Susun & Deteksi Input")["parameters"]["jsCode"]
-    detector = detector.replace("const outputLanguage = raw['Bahasa Output'] === 'en' ? 'en' : 'id';",
-        "const outputLanguage = raw['Bahasa Output'] === 'en' ? 'en' : 'id';\n"
-        "  const analysisMode = text(raw['Analysis Mode'], 30).toLowerCase() || 'auto';\n"
-        "  const targetColumn = text(raw['Target Column'], 180);\n"
-        "  const timeColumn = text(raw['Time Column'], 180);\n"
-        "  const groupColumn = text(raw['Group Column'], 180);\n"
-        "  const forecastHorizon = Number(raw['Forecast Horizon (months)']) || 3;")
-    detector = detector.replace("outputLanguage,\n      defaultMode", "outputLanguage, analysisMode, targetColumn, timeColumn, groupColumn, forecastHorizon,\n      defaultMode")
-    find(data, "Susun & Deteksi Input")["parameters"]["jsCode"] = detector
 
     # Make room for seven additional Code nodes in the central spine.
     for node in data["nodes"]:

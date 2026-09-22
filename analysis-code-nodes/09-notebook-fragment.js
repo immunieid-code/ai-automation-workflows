@@ -20,7 +20,7 @@
     source.push("\n# Monthly series and a last-value baseline for forecast verification.\n",
       `forecast_data = df_clean[[${py(analysisPlan.date)}, ${py(r.target)}]].dropna().copy()\n`,
       `forecast_data[${py(analysisPlan.date)}] = pd.to_datetime(forecast_data[${py(analysisPlan.date)}])\n`,
-      `monthly = forecast_data.groupby(forecast_data[${py(analysisPlan.date)}].dt.to_period('M'))[${py(r.target)}].sum()\n`,
+      `monthly = forecast_data.groupby(forecast_data[${py(analysisPlan.date)}].dt.to_period('M'))[${py(r.target)}].${r.aggregation === 'mean' ? 'mean' : 'sum'}()\n`,
       "display(monthly.tail(24))\nprint('Last-value baseline for next period:', monthly.iloc[-1])\n");
   }
   if (advancedAnalysis.results.some((r) => r.method === 'clustering')) {
