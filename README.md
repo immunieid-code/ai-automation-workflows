@@ -8,7 +8,7 @@ The deployed portfolio page and its referenced public assets are also versioned 
 | --- | --- | --- | --- |
 | Sleyd Presentation · form pipeline | Uploaded documents and revisions need a coherent slide plan before rendering. | PDF/DOCX/PPTX extraction, validation, content classification, slide outline review and edits, image retrieval, HTML sanitation, Vercel deployment and aliasing. 35 nodes. | [`sleyd-presentation-form.json`](workflows/sleyd-presentation-form.json) |
 | Sleyd Scrollytelling · form pipeline | Long visual stories need consistent section structure and a human review step. | Input sanitation, AI outline review, section edits, looped rendering, image retrieval, HTML sanitation and Vercel deployment. 29 nodes. | [`sleyd-scrollytelling-form.json`](workflows/sleyd-scrollytelling-form.json) |
-| AutoData Analyst · deck and notebook | Mixed data files require profiling, cleaning and KPI preparation before reporting. | CSV/TSV/XLS/XLSX/JSON routing, health audit, cleaning, aggregation, AI narrative, HTML deck, Jupyter notebook, artifact checks and email delivery. 25 nodes. | [`autodata-analyst-deck-notebook.json`](workflows/autodata-analyst-deck-notebook.json) |
+| AutoData Analyst · deck and notebook | Mixed data files and different business questions require analysis methods that fit the available columns. | CSV/TSV/XLS/XLSX/JSON routing, health audit, cleaning, KPIs, conditional regression, monthly forecasting, clustering, hypothesis tests, exploratory correlations, AI narrative, HTML deck, Jupyter notebook, artifact checks and email delivery. 32 nodes. | [`autodata-analyst-deck-notebook.json`](workflows/autodata-analyst-deck-notebook.json) |
 
 ## Project Overview
 
@@ -26,7 +26,17 @@ An inactive 29-node n8n export for section-based visual stories. A person can re
 
 ### AutoData Analyst — deck and notebook
 
-An inactive 25-node n8n export for routing CSV, TSV, Excel and JSON files through profiling, cleaning, aggregation and KPI steps to produce a visual deck and notebook. The file describes the design, not a verified runtime saving or deployment to a client.
+An inactive 32-node n8n export for routing CSV, TSV, Excel and JSON files through profiling, cleaning, aggregation and KPI steps. Seven added JavaScript Code nodes inspect the user's question and the dataset, then conditionally run supported advanced analyses:
+
+- **Regression:** numeric target, up to three numeric predictors selected from training data, deterministic 80/20 holdout, mean baseline, linear regression and prespecified ridge regression. Reports MAE, RMSE and R² where defined.
+- **Forecasting:** consecutive monthly periods only, at least eight observed months, rolling validation to select last-value, three-period average or simple exponential smoothing; later holdout metrics and a 1–12 month forecast. No missing months are invented.
+- **Clustering:** standardized numeric features, deterministic k-means for 2–5 candidate clusters, sample silhouette comparison, sizes and centroids. Complete-row sample is capped at 2,000.
+- **Hypothesis tests:** two-sided Welch t-test for two groups, one-way ANOVA for 3–10 groups, or chi-square independence for categorical variables when expected counts are adequate. Reports a p-value and an effect-size measure. Assumptions still require analyst review.
+- **Exploratory analysis:** pairwise Pearson correlations across up to 12 numeric columns, with paired sample counts and no causal interpretation.
+
+The form now includes optional analysis mode, exact column names and forecast horizon. An explicit but unmatched column name is not silently replaced. Unsupported methods are skipped with a reason; descriptive output remains available. Results enter the AI prompt as computed evidence, and the deck and notebook include an advanced-analysis section. The notebook includes independent Python verification cells; its package implementation may differ from the embedded JavaScript calculations.
+
+The seven editable Code-node sources are in [`analysis-code-nodes/`](analysis-code-nodes/). Run `python assemble_advanced_autodata.py` in this repository to install or refresh them in the **local private export**, then run `python sanitize_exports.py "../../Project Automation"` to regenerate the public export. `node verify_advanced_autodata.js` checks syntax, representative analytic paths, unsuitable-data fallback and generated artifacts. None of these tests replaces an end-to-end execution in an n8n instance with real credentials.
 
 ## Import and configure
 
