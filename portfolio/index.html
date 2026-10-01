@@ -817,9 +817,9 @@ footer .num{color:var(--prose); opacity:.5}
       <article class="trim" style="--d:.15s">
         <div class="meta"><span class="lbl" style="color:var(--prose)">2024 &middot; Election campaign</span>
           <span class="done lbl"><svg aria-hidden="true"><use href="#i-cross"/></svg>Done</span></div>
-        <h3>Voter database matching</h3>
-        <p class="overview"><b>Project Overview.</b> A 2024 Kebayoran Lama campaign needed voter and field-contact lists linked across six kelurahan for polling-station follow-up.</p>
-        <p>Matched two voter lists with PostgreSQL exact joins, then pg_trgm similarity at 0.55 for near matches. The 2024 campaign export contained 993 matched records across six neighborhoods; the process took minutes instead of days of manual reconciliation.</p>
+        <h3>Dapil 7 voter data reconciliation</h3>
+        <p class="overview"><b>Project Overview.</b> A 2024 campaign needed 15,156 field-contact records reconciled with KPU voter data distributed across 3,830 polling-station PDFs, 34 kelurahan and five kecamatan in Dapil 7.</p>
+        <p>Standardized the voter extracts and prepared 14,021 field rows for SQL. A strict PostgreSQL pass matched name, RT, RW and age within each area; <code>UNION ALL</code> assembled the results. <code>FULL OUTER JOIN</code> checks surfaced unmatched names and missing TPS values before targeted follow-up passes retried reviewed rows on name, RT and RW. The result was a coordinator-ready dataset organized by area and TPS.</p>
         <div class="links">
           <a class="out" href="https://nr-shalahudin-7jnq.slides.sleyd.com" target="_blank" rel="noopener">
             Slides <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
